@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="brand_ink">#0E1B17</color>
+    <color name="brand_paper">#F6F5F0</color>
+    <color name="brand_emerald">#0F7B5F</color>
+    <color name="launcher_bg">#0E2A22</color>
+
+    <style name="Theme.SpendTracker" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/brand_paper</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+    </style>
+</resources>

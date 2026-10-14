@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 108dp adaptive canvas; mark sits inside the 66dp safe zone.
+     A ring split into an arc (spend) with a rupee-style stroke in the middle. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- full faint ring -->
+    <path
+        android:pathData="M54,30a24,24 0,1 1,0 48a24,24 0,1 1,0 -48"
+        android:strokeWidth="6"
+        android:strokeColor="#3355D6A8"
+        android:fillColor="#00000000" />
+    <!-- spend arc -->
+    <path
+        android:pathData="M54,30a24,24 0,0 1,22.8 31.4"
+        android:strokeWidth="6"
+        android:strokeLineCap="round"
+        android:strokeColor="#FF7BE0B8"
+        android:fillColor="#00000000" />
+    <path
+        android:pathData="M76.8,61.4a24,24 0,0 1,-38.6 10.6"
+        android:strokeWidth="6"
+        android:strokeLineCap="round"
+        android:strokeColor="#FFF2C66D"
+        android:fillColor="#00000000" />
+    <!-- rupee mark -->
+    <path
+        android:pathData="M45,43h18M45,49h18M49,43c9,0 10,12 0,12h-3l12,11"
+        android:strokeWidth="3.6"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:strokeColor="#FFFFFFFF"
+        android:fillColor="#00000000" />
+</vector>

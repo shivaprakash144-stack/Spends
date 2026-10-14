@@ -1,0 +1,54 @@
+{
+  "version": 1,
+  "_doc": "Default categories and merchant rules. 'merchants' are brand names (also used as the clean display name); 'keywords' are generic words matched against the merchant only. 'bodyHints' are matched against the whole SMS text. Prefix a value with re: to use a regex.",
+
+  "categories": [
+    { "key": "food",          "name": "Food and dining",   "icon": "restaurant",   "color": "#E8705A", "type": "EXPENSE" },
+    { "key": "groceries",     "name": "Groceries",         "icon": "grocery",      "color": "#5BAE6E", "type": "EXPENSE" },
+    { "key": "shopping",      "name": "Shopping",          "icon": "shopping",     "color": "#D9A23B", "type": "EXPENSE" },
+    { "key": "transport",     "name": "Transport",         "icon": "transport",    "color": "#4C8DD6", "type": "EXPENSE" },
+    { "key": "fuel",          "name": "Fuel",              "icon": "fuel",         "color": "#C4573F", "type": "EXPENSE" },
+    { "key": "bills",         "name": "Bills and utilities","icon": "bolt",        "color": "#8A7BD8", "type": "EXPENSE" },
+    { "key": "subscriptions", "name": "Subscriptions",     "icon": "subscriptions","color": "#C368B0", "type": "EXPENSE" },
+    { "key": "rent",          "name": "Rent and housing",  "icon": "home",         "color": "#7C8B5A", "type": "EXPENSE" },
+    { "key": "health",        "name": "Health",            "icon": "health",       "color": "#3FA7A0", "type": "EXPENSE" },
+    { "key": "entertainment", "name": "Entertainment",     "icon": "movie",        "color": "#E0567E", "type": "EXPENSE" },
+    { "key": "travel",        "name": "Travel",            "icon": "flight",       "color": "#2E9CC9", "type": "EXPENSE" },
+    { "key": "emi",           "name": "EMI and loans",     "icon": "loan",         "color": "#9C6B4E", "type": "EXPENSE" },
+    { "key": "investments",   "name": "Investments",       "icon": "invest",       "color": "#2F8F6B", "type": "EXPENSE" },
+    { "key": "cash",          "name": "Cash withdrawal",   "icon": "cash",         "color": "#6F7C85", "type": "EXPENSE" },
+    { "key": "transfers",     "name": "Transfers",         "icon": "transfer",     "color": "#8C96A0", "type": "TRANSFER" },
+    { "key": "income",        "name": "Income",            "icon": "income",       "color": "#1F9D6B", "type": "INCOME" },
+    { "key": "uncategorised", "name": "Uncategorised",     "icon": "help",         "color": "#A0A4A8", "type": "EXPENSE" }
+  ],
+
+  "rules": [
+    { "category": "food", "merchants": ["Swiggy", "Zomato", "Domino's", "Dominos", "McDonald's", "McDonalds", "KFC", "Pizza Hut", "Starbucks", "Burger King", "Subway", "Haldiram's", "Chaayos", "Third Wave Coffee", "EatSure", "Box8", "Faasos", "Behrouz"], "keywords": ["cafe", "restaurant", "hotel", "bakery", "kitchen", "foods", "dhaba", "biryani", "tea", "coffee", "sweets"] },
+    { "category": "groceries", "merchants": ["Blinkit", "Zepto", "BigBasket", "Instamart", "DMart", "Avenue Supermarts", "JioMart", "Nature's Basket", "More Retail", "Spencer's", "Ratnadeep", "Reliance Fresh", "Smart Bazaar", "Swiggy Instamart", "Grofers"], "keywords": ["supermarket", "kirana", "provision", "mart", "vegetables", "dairy", "milk"] },
+    { "category": "shopping", "merchants": ["Amazon", "Amzn", "Flipkart", "Myntra", "Ajio", "Meesho", "Nykaa", "Tata Cliq", "Croma", "Reliance Digital", "Decathlon", "Ikea", "Lenskart", "FirstCry", "Snapdeal", "Pantaloons", "Westside", "Zara", "H&M", "Uniqlo", "Tanishq"], "keywords": ["store", "retail", "fashion", "electronics", "mall"] },
+    { "category": "transport", "merchants": ["Uber", "Ola", "Olacabs", "Rapido", "Namma Yatri", "BluSmart", "IRCTC", "Metro", "BMRCL", "DMRC", "Redbus", "FASTag", "Yulu"], "keywords": ["metro", "cab", "taxi", "auto", "parking", "toll"] },
+    { "category": "fuel", "merchants": ["HPCL", "BPCL", "IOCL", "Indian Oil", "Bharat Petroleum", "Hindustan Petroleum", "Shell", "Nayara", "Jio-bp"], "keywords": ["petrol", "fuel", "filling station", "petroleum", "fuels"] },
+    { "category": "bills", "merchants": ["BESCOM", "TNEB", "TANGEDCO", "MSEDCL", "Tata Power", "Adani Electricity", "BSES", "Airtel", "Jio", "Vi", "Vodafone Idea", "BSNL", "ACT Fibernet", "Hathway", "Tata Play", "Mahanagar Gas", "Indane", "HP Gas", "Bharat Gas", "BBPS"], "keywords": ["electricity", "broadband", "gas", "water", "recharge", "postpaid", "prepaid", "dth", "bill"] },
+    { "category": "subscriptions", "merchants": ["Netflix", "Spotify", "Hotstar", "Disney+ Hotstar", "JioHotstar", "Prime Video", "Amazon Prime", "YouTube", "YouTube Premium", "Google Play", "Google", "Apple", "Apple Services", "iCloud", "SonyLIV", "Zee5", "Audible", "LinkedIn", "Microsoft", "Adobe", "ChatGPT", "OpenAI", "Anthropic", "Claude"], "keywords": ["subscription", "membership", "renewal"] },
+    { "category": "rent", "merchants": ["NoBroker", "NestAway", "MyGate", "NoBrokerHood"], "keywords": ["rent", "maintenance", "society", "housing"] },
+    { "category": "health", "merchants": ["Apollo", "Apollo Pharmacy", "PharmEasy", "1mg", "Tata 1mg", "Netmeds", "Practo", "MedPlus", "Cult.fit", "Cultfit"], "keywords": ["hospital", "clinic", "pharmacy", "medical", "diagnostics", "labs", "dental", "chemist"] },
+    { "category": "entertainment", "merchants": ["BookMyShow", "PVR", "INOX", "PVR INOX", "Cinepolis", "Paytm Insider", "Steam", "PlayStation"], "keywords": ["cinema", "movies", "gaming", "events"] },
+    { "category": "travel", "merchants": ["MakeMyTrip", "Goibibo", "IndiGo", "Air India", "Akasa", "SpiceJet", "Vistara", "OYO", "Cleartrip", "EaseMyTrip", "Ixigo", "Airbnb", "Booking.com", "Agoda", "Yatra"], "keywords": ["airlines", "airways", "resort", "travels", "holidays"] },
+    { "category": "emi", "merchants": ["Bajaj Finserv", "Bajaj Finance", "HDFC Credila", "Home Credit", "ZestMoney", "Simpl", "LazyPay", "Kreditbee"], "keywords": ["emi", "loan", "nach", "ecs"] },
+    { "category": "investments", "merchants": ["Zerodha", "Groww", "Upstox", "Kuvera", "Coin", "Paytm Money", "ET Money", "Smallcase", "INDmoney", "Angel One", "NPS", "PPF", "BSE", "NSE Clearing", "ICCL", "Indian Clearing Corp"], "keywords": ["sip", "mutual fund", "mf", "stocks", "demat"] },
+    { "category": "cash", "merchants": [], "keywords": ["ATM", "cash withdrawal", "ATM withdrawal"] },
+    { "category": "transfers", "merchants": [], "keywords": ["self", "self transfer", "own account"] }
+  ],
+
+  "bodyHints": [
+    { "category": "fuel", "keywords": ["fuel", "petrol", "diesel"] },
+    { "category": "emi", "keywords": ["EMI", "loan repayment", "NACH"] },
+    { "category": "bills", "keywords": ["insurance premium", "electricity bill", "BBPS"] },
+    { "category": "health", "keywords": ["insurance"] },
+    { "category": "investments", "keywords": ["SIP", "mutual fund"] },
+    { "category": "transfers", "keywords": ["self transfer", "own account", "to self"] },
+    { "category": "cash", "keywords": ["ATM withdrawal", "cash withdrawal"] }
+  ],
+
+  "incomeHints": ["salary", "sal for", "payroll", "refund", "cashback", "interest credited", "int.pd", "int pd", "dividend", "reversal"]
+}

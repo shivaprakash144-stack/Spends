@@ -1,0 +1,249 @@
+{
+  "version": 1,
+  "_doc": "Regexes are tried in order per bank, then a generic fallback. Named groups: amount, type, last4, merchant, ref, balance, limit, date. Macros: {AMT} amount, {CUR} Rs/INR/₹, {MASK} XX/** mask, {DATE} date token. Body whitespace (including new lines) is collapsed to single spaces before matching. Matching is case-insensitive.",
+
+  "skip": [
+    "\\bOTP\\b",
+    "one[ -]?time[ -]?pass(?:word|code)",
+    "verification code",
+    "\\bis due\\b",
+    "\\bdue (?:date|on|by)\\b",
+    "(?:total|min(?:imum)?)\\.?\\s*(?:amt\\.?|amount)?\\s*due",
+    "\\brequested\\b",
+    "collect request",
+    "\\bdeclined\\b",
+    "\\bfailed\\b",
+    "\\bunsuccessful\\b",
+    "\\bcould not be (?:processed|completed)\\b",
+    "\\binsufficient\\b",
+    "\\breversed\\b",
+    "will be (?:debited|deducted|charged)",
+    "\\bstatement (?:for|of)\\b.*\\bgenerated\\b"
+  ],
+
+  "promo": [
+    "pre-?approved",
+    "\\boffers?\\b",
+    "apply now",
+    "click (?:here|the link|to apply)",
+    "limited period",
+    "\\bvouchers?\\b",
+    "congratulations",
+    "\\bwin\\b",
+    "\\bexclusive\\b",
+    "\\bup\\s?to\\s+(?:Rs|INR|₹)",
+    "\\bloan of\\b",
+    "\\binstant loan\\b",
+    "\\bhurry\\b"
+  ],
+
+  "banks": [
+    {
+      "id": "hdfc",
+      "name": "HDFC Bank",
+      "senders": ["HDFCBK", "HDFCBN", "HDFCBANK", "HDFCCC"],
+      "patterns": [
+        {
+          "id": "hdfc-upi-sent",
+          "type": "DEBIT",
+          "mode": "UPI",
+          "regex": "Sent {CUR}(?<amount>{AMT}) From HDFC Bank A/C {MASK}(?<last4>\\d{4}) To (?<merchant>.+?) On (?<date>[\\d/]+) Ref (?<ref>\\d+)"
+        },
+        {
+          "id": "hdfc-upi-received",
+          "type": "CREDIT",
+          "mode": "UPI",
+          "regex": "(?:Money Received - )?(?:Received )?{CUR}(?<amount>{AMT}) (?:credited to|in your|in) (?:HDFC Bank )?A/c {MASK}(?<last4>\\d{4}) (?:on (?<date>{DATE}) )?(?:by|from) (?:VPA )?(?<merchant>\\S+?)(?: \\(| on |\\.? UPI| Ref|\\.|$)"
+        },
+        {
+          "id": "hdfc-card-spent",
+          "type": "DEBIT",
+          "mode": "CARD",
+          "accountType": "CREDIT_CARD",
+          "regex": "Spent {CUR}(?<amount>{AMT}) On HDFC Bank Card {MASK}(?<last4>\\d{4}) At (?<merchant>.+?) On (?<date>\\d{4}-\\d{2}-\\d{2})"
+        },
+        {
+          "id": "hdfc-debit-info",
+          "type": "DEBIT",
+          "regex": "{CUR}(?<amount>{AMT}) (?:has been )?debited from (?:HDFC Bank )?A/c {MASK}(?<last4>\\d{4}) on (?<date>{DATE})\\.? (?:Info:? ?|to |towards )(?:VPA )?(?<merchant>.+?)(?:\\.? Avl bal:? ?{CUR}(?<balance>{AMT})|\\.? ?\\(UPI Ref No\\.? (?<ref>\\d+)\\)|\\. |$)"
+        },
+        {
+          "id": "hdfc-deposit",
+          "type": "CREDIT",
+          "regex": "{CUR}(?<amount>{AMT}) deposited in (?:HDFC Bank )?A/c {MASK}(?<last4>\\d{4}) on (?<date>{DATE}) for (?<merchant>.+?)\\.? ?Avl bal:? ?{CUR}(?<balance>{AMT})"
+        }
+      ]
+    },
+    {
+      "id": "icici",
+      "name": "ICICI Bank",
+      "senders": ["ICICIB", "ICICIT", "ICICIBANK", "ICICIO"],
+      "patterns": [
+        {
+          "id": "icici-card-spent",
+          "type": "DEBIT",
+          "mode": "CARD",
+          "accountType": "CREDIT_CARD",
+          "regex": "{CUR}(?<amount>{AMT}) spent (?:using|on) ICICI Bank Card {MASK}(?<last4>\\d{4}) on (?<date>{DATE}) (?:on|at) (?<merchant>.+?)\\. Avl Limit:? ?{CUR}(?<limit>{AMT})"
+        },
+        {
+          "id": "icici-upi-debit",
+          "type": "DEBIT",
+          "mode": "UPI",
+          "regex": "ICICI Bank Acc(?:oun)?t {MASK}(?<last4>\\d{3,4}) debited (?:for|with) {CUR}(?<amount>{AMT}) on (?<date>{DATE})[;,] (?<merchant>.+?) credited\\. UPI:? ?(?<ref>\\d+)"
+        },
+        {
+          "id": "icici-credit",
+          "type": "CREDIT",
+          "regex": "(?:ICICI Bank )?Acc(?:oun)?t {MASK}(?<last4>\\d{3,4}) (?:is )?credited (?:with|by) {CUR}(?<amount>{AMT}) on (?<date>{DATE})(?: (?:from|by) (?<merchant>.+?))?\\.(?: UPI:? ?(?<ref>\\d+))?"
+        }
+      ]
+    },
+    {
+      "id": "sbi",
+      "name": "SBI",
+      "senders": ["SBIUPI", "SBIINB", "SBIPSG", "SBMSMS", "CBSSBI", "ATMSBI", "SBICRD", "SBIBNK", "SBYONO"],
+      "patterns": [
+        {
+          "id": "sbi-upi-debit",
+          "type": "DEBIT",
+          "mode": "UPI",
+          "regex": "A/C {MASK}(?<last4>\\d{4}) debited by (?:{CUR})?(?<amount>{AMT}) on date (?<date>\\w+) trf to (?<merchant>.+?) Ref ?no\\.? ?(?<ref>\\d+)"
+        },
+        {
+          "id": "sbi-upi-credit",
+          "type": "CREDIT",
+          "mode": "UPI",
+          "regex": "A/C {MASK}(?<last4>\\d{4})-? ?credited by (?:{CUR})?(?<amount>{AMT}) on (?:date )?(?<date>\\w+) (?:transfer )?from (?<merchant>.+?) Ref ?No\\.? ?(?<ref>\\d+)"
+        },
+        {
+          "id": "sbi-card-spent",
+          "type": "DEBIT",
+          "mode": "CARD",
+          "accountType": "CREDIT_CARD",
+          "regex": "{CUR}(?<amount>{AMT}) spent on your SBI Credit Card ending (?:with )?(?<last4>\\d{4}) at (?<merchant>.+?) on (?<date>[\\d/-]+)"
+        },
+        {
+          "id": "sbi-debit-card",
+          "type": "DEBIT",
+          "mode": "CARD",
+          "regex": "for {CUR}(?<amount>{AMT}) by SBI Debit Card {MASK}(?<last4>\\d{4}) (?:done )?at (?<merchant>.+?) on (?<date>\\w+)(?: at [\\d:]+)?.*?available balance is {CUR}(?<balance>{AMT})"
+        }
+      ]
+    },
+    {
+      "id": "axis",
+      "name": "Axis Bank",
+      "senders": ["AXISBK", "AXISBN", "AXISBANK"],
+      "patterns": [
+        {
+          "id": "axis-credit",
+          "type": "CREDIT",
+          "regex": "{CUR}(?<amount>{AMT}) credited to A/c no\\.? {MASK}(?<last4>\\d{4}) on (?<date>[\\d-]+)(?: [\\d:]+(?: IST)?)? (?:by|from) (?<merchant>.+?)\\. Avl Bal\\.? ?{CUR}(?<balance>{AMT})"
+        },
+        {
+          "id": "axis-debit",
+          "type": "DEBIT",
+          "regex": "{CUR}(?<amount>{AMT}) debited from A/c no\\.? {MASK}(?<last4>\\d{4}) on (?<date>[\\d-]+)(?: [\\d:]+(?: IST)?)? (?:at|to|towards|by) (?<merchant>.+?)\\. Avl Bal\\.? ?{CUR}(?<balance>{AMT})"
+        },
+        {
+          "id": "axis-upi-debit-short",
+          "type": "DEBIT",
+          "mode": "UPI",
+          "regex": "Debit {CUR}(?<amount>{AMT}) (?:Axis Bank )?A/c no\\.? {MASK}(?<last4>\\d{4}) (?<date>[\\d-]+)(?: [\\d:]+)? UPI/(?:P2[AM]/)?(?<ref>\\d+)/(?<merchant>.+?)(?: Not you| SMS BLOCK|$)"
+        },
+        {
+          "id": "axis-card-spent",
+          "type": "DEBIT",
+          "mode": "CARD",
+          "accountType": "CREDIT_CARD",
+          "regex": "Spent {CUR}(?<amount>{AMT}) Axis Bank Card no\\.? {MASK}(?<last4>\\d{4}) (?<date>[\\d-]+) [\\d:]+(?: IST)? (?<merchant>.+?) Avl Limit:? ?{CUR}(?<limit>{AMT})"
+        }
+      ]
+    },
+    {
+      "id": "kotak",
+      "name": "Kotak Bank",
+      "senders": ["KOTAKB", "KOTAKBANK", "KMBLTD"],
+      "patterns": [
+        {
+          "id": "kotak-debited-vpa",
+          "type": "DEBIT",
+          "mode": "UPI",
+          "regex": "{CUR}(?<amount>{AMT}) debited from a/c {MASK}(?<last4>\\d{4}) on (?<date>[\\d-]+) to (?:VPA )?(?<merchant>[^\\s(]+?)(?: ?\\(UPI Ref no\\.? ?(?<ref>\\d+)\\))?(?:\\.? |\\.?$)"
+        },
+        {
+          "id": "kotak-sent",
+          "type": "DEBIT",
+          "mode": "UPI",
+          "regex": "Sent {CUR}(?<amount>{AMT}) from Kotak Bank AC {MASK}(?<last4>\\d{4}) to (?<merchant>\\S+?) on (?<date>[\\d-]+)\\.? ?UPI Ref:? ?(?<ref>\\d+)"
+        },
+        {
+          "id": "kotak-received",
+          "type": "CREDIT",
+          "mode": "UPI",
+          "regex": "Received {CUR}(?<amount>{AMT}) in your Kotak Bank AC {MASK}(?<last4>\\d{4}) from (?<merchant>\\S+?) on (?<date>[\\d-]+)\\.? ?UPI Ref:? ?(?<ref>\\d+)"
+        }
+      ]
+    },
+    {
+      "id": "paytm",
+      "name": "Paytm",
+      "kind": "UPI_APP",
+      "accountType": "WALLET",
+      "senders": ["PAYTMB", "IPAYTM", "PYTMBK", "PAYTM"],
+      "patterns": [
+        {
+          "id": "paytm-wallet-paid",
+          "type": "DEBIT",
+          "mode": "UPI",
+          "accountType": "WALLET",
+          "regex": "Paid {CUR}(?<amount>{AMT}) to (?<merchant>.+?) from Paytm (?:Balance|Wallet)"
+        },
+        {
+          "id": "paytm-upi-sent",
+          "type": "DEBIT",
+          "mode": "UPI",
+          "accountType": "SAVINGS",
+          "regex": "{CUR}(?<amount>{AMT}) (?:sent|paid) to (?<merchant>.+?) from (?:.+? )?a/c {MASK}(?<last4>\\d{4})\\.?.*?(?:UPI )?Ref(?: No)?:? ?(?<ref>\\d{9,})"
+        }
+      ]
+    },
+    {
+      "id": "phonepe",
+      "name": "PhonePe",
+      "kind": "UPI_APP",
+      "accountType": "SAVINGS",
+      "senders": ["PHONPE", "PHONEPE"],
+      "patterns": [
+        {
+          "id": "phonepe-paid",
+          "type": "DEBIT",
+          "mode": "UPI",
+          "regex": "(?:Paid|Sent) {CUR}(?<amount>{AMT}) to (?<merchant>.+?)(?: from .+? {MASK}(?<last4>\\d{4}))?(?: via PhonePe| using PhonePe)?\\.?.*?(?:UPI )?Ref(?:erence)?(?: (?:No|ID))?\\.?:? ?(?<ref>\\d{9,})"
+        },
+        {
+          "id": "phonepe-received",
+          "type": "CREDIT",
+          "mode": "UPI",
+          "regex": "Received {CUR}(?<amount>{AMT}) from (?<merchant>.+?)(?: in .+? {MASK}(?<last4>\\d{4}))?\\.?.*?(?:UPI )?Ref(?:erence)?(?: (?:No|ID))?\\.?:? ?(?<ref>\\d{9,})"
+        }
+      ]
+    },
+    {
+      "id": "gpay",
+      "name": "Google Pay",
+      "kind": "UPI_APP",
+      "accountType": "SAVINGS",
+      "senders": ["GPAY", "GOOGLEPAY", "GOOGPY"],
+      "patterns": [
+        {
+          "id": "gpay-paid",
+          "type": "DEBIT",
+          "mode": "UPI",
+          "regex": "(?:Paid|Sent) {CUR}(?<amount>{AMT}) to (?<merchant>.+?)(?: from .+? {MASK}(?<last4>\\d{4}))?\\.?.*?(?:UPI )?(?:Ref|transaction ID)(?: No)?\\.?:? ?(?<ref>\\d{9,})"
+        }
+      ]
+    }
+  ]
+}

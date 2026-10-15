@@ -75,7 +75,15 @@ class GmailClient @Inject constructor(@ApplicationContext private val context: C
             conn.readTimeout = 30_000
             val code = conn.responseCode
             if (code == 401) throw AuthExpiredException()
-            if (code !in 200..299) throw IOException("Gmail HTTP $code")
+            if (code !in 200..299) {
+                val err = runCatching { conn.errorStream?.bufferedReader()?.use { it.readText() } }.getOrNull().orEmpty()
+                val obj = runCatching { Json.parseToJsonElement(err).jsonObject["error"]?.jsonObject }.getOrNull()
+                val message = (obj?.get("message") as? JsonPrimitive)?.content ?: err.take(200)
+                val reason = runCatching {
+                    ((obj?.get("errors") as? JsonArray)?.firstOrNull()?.jsonObject?.get("reason") as? JsonPrimitive)?.content
+                }.getOrNull() ?: (obj?.get("status") as? JsonPrimitive)?.content
+                throw GmailHttpException(code, reason, message)
+            }
             val text = conn.inputStream.bufferedReader().use { it.readText() }
             return Json.parseToJsonElement(text).jsonObject
         } finally {
@@ -101,6 +109,9 @@ class GmailClient @Inject constructor(@ApplicationContext private val context: C
     }
 
     class AuthExpiredException : IOException("Gmail access expired")
+
+    /** A non-network error from Google (API disabled, quota, bad request...). Retrying won't help. */
+    class GmailHttpException(val code: Int, val reason: String?, override val message: String) : Exception(message)
 
     companion object {
         const val GMAIL_READONLY = "https://www.googleapis.com/auth/gmail.readonly"

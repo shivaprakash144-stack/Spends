@@ -73,7 +73,7 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
-data class ScanProgress(val running: Boolean, val finished: Boolean, val done: Int, val total: Int, val found: Int, val failed: Boolean)
+data class ScanProgress(val running: Boolean, val finished: Boolean, val done: Int, val total: Int, val found: Int, val failed: Boolean, val error: String? = null)
 
 @HiltViewModel
 class OnboardingViewModel @Inject constructor(
@@ -107,6 +107,7 @@ fun WorkInfo.toProgress(): ScanProgress {
         total = data.getInt(InboxScanWorker.KEY_TOTAL, 0),
         found = data.getInt(InboxScanWorker.KEY_FOUND, 0),
         failed = state == WorkInfo.State.FAILED,
+        error = if (state == WorkInfo.State.FAILED) outputData.getString(InboxScanWorker.KEY_ERROR) else null,
     )
 }
 

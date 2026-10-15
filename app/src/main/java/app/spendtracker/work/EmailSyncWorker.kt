@@ -39,8 +39,9 @@ class EmailSyncWorker @AssistedInject constructor(
         val token = try {
             gmail.tokenOrNull()
         } catch (e: Exception) {
-            return Result.retry()
-        } ?: return Result.failure(workDataOf(KEY_ERROR to "consent"))
+            return if (runAttemptCount < 2) Result.retry()
+            else Result.failure(workDataOf(KEY_ERROR to "Google sign-in failed: ${e.javaClass.simpleName} ${e.message.orEmpty()}".take(300)))
+        } ?: return Result.failure(workDataOf(KEY_ERROR to ERR_CONSENT))
 
         // First sync goes back as far as the SMS scan; later syncs overlap by two days.
         val since = if (s.lastEmailSyncAt > 0) s.lastEmailSyncAt - 2 * DAY
@@ -60,9 +61,20 @@ class EmailSyncWorker @AssistedInject constructor(
             settings.setLastEmailSyncAt(System.currentTimeMillis())
             Result.success(workDataOf(KEY_DONE to done, KEY_TOTAL to ids.size, KEY_FOUND to found))
         } catch (e: GmailClient.AuthExpiredException) {
-            Result.failure(workDataOf(KEY_ERROR to "consent"))
+            Result.failure(workDataOf(KEY_ERROR to ERR_CONSENT))
+        } catch (e: GmailClient.GmailHttpException) {
+            val text = when {
+                e.code == 403 && (e.reason == "accessNotConfigured" || e.reason == "SERVICE_DISABLED" || e.message.contains("has not been used", true) || e.message.contains("disabled", true)) ->
+                    "Gmail API is not enabled in your Google Cloud project. Open console.cloud.google.com > APIs & Services > Library > Gmail API > Enable (same project as the Android client), wait 2 minutes, then Sync now."
+                e.code == 403 -> "Google refused access (403 ${e.reason ?: ""}): ${e.message}"
+                e.code == 429 -> "Gmail rate limit reached. It will try again in the next sync."
+                else -> "Gmail error ${e.code}: ${e.message}"
+            }
+            Result.failure(workDataOf(KEY_ERROR to text.take(400)))
         } catch (e: IOException) {
-            if (runAttemptCount < 3) Result.retry() else Result.failure(workDataOf(KEY_ERROR to "network"))
+            if (runAttemptCount < 3) Result.retry() else Result.failure(workDataOf(KEY_ERROR to "No internet connection. Will try again later."))
+        } catch (e: Exception) {
+            Result.failure(workDataOf(KEY_ERROR to "Sync crashed: ${e.javaClass.simpleName} ${e.message.orEmpty()}".take(300)))
         }
     }
 
@@ -73,6 +85,7 @@ class EmailSyncWorker @AssistedInject constructor(
         const val KEY_TOTAL = "total"
         const val KEY_FOUND = "found"
         const val KEY_ERROR = "error"
+        const val ERR_CONSENT = "consent"
         private const val MAX_MESSAGES = 1500
         private const val DAY = 24 * 60 * 60 * 1000L
 

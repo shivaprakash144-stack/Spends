@@ -309,7 +309,16 @@ fun SettingsScreen(
                         }
                         if (emailSync?.failed == true && s.gmailConnected) {
                             Spacer(Modifier.height(6.dp))
-                            Text("Last sync failed. Tap Reconnect if Google asks for access again.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                            val err = emailSync?.error
+                            Text(
+                                when {
+                                    err == null -> "Last sync failed."
+                                    err == EmailSyncWorker.ERR_CONSENT -> "Google needs you to allow access again. Tap Reconnect."
+                                    else -> "Last sync failed: $err"
+                                },
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.error,
+                            )
                         }
                         Row {
                             if (!s.gmailConnected) {

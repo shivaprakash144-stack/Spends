@@ -15,6 +15,8 @@ data class TxnFingerprint(
     val merchantKnown: Boolean,
     val hasBalance: Boolean,
     val fromUpiApp: Boolean,
+    /** Notification / email / statement records: usually lack ref or last-4, so match more loosely. */
+    val weak: Boolean = false,
 )
 
 sealed interface DedupeDecision {
@@ -29,6 +31,8 @@ object Deduplicator {
     const val WINDOW_MS = 5 * 60 * 1000L
     const val REF_WINDOW_MS = 24 * 60 * 60 * 1000L
     const val SELF_TRANSFER_WINDOW_MS = 10 * 60 * 1000L
+    /** Emails and notifications can lag the SMS by a while. */
+    const val WEAK_WINDOW_MS = 30 * 60 * 1000L
 
     /**
      * Same amount and type, within 5 minutes, and the UPI ref or the account last-4 match.
@@ -41,7 +45,10 @@ object Deduplicator {
             val dt = abs(other.timestamp - candidate.timestamp)
             val refMatch = !candidate.upiRef.isNullOrBlank() && candidate.upiRef == other.upiRef
             val last4Match = !candidate.last4.isNullOrBlank() && candidate.last4 == other.last4
-            (refMatch && dt <= REF_WINDOW_MS) || (dt <= WINDOW_MS && (refMatch || last4Match))
+            val refConflict = !candidate.upiRef.isNullOrBlank() && !other.upiRef.isNullOrBlank() && candidate.upiRef != other.upiRef
+            val last4Conflict = !candidate.last4.isNullOrBlank() && !other.last4.isNullOrBlank() && candidate.last4 != other.last4
+            val weakMatch = (candidate.weak || other.weak) && dt <= WEAK_WINDOW_MS && !refConflict && !last4Conflict
+            (refMatch && dt <= REF_WINDOW_MS) || (dt <= WINDOW_MS && (refMatch || last4Match)) || weakMatch
         } ?: return DedupeDecision.Unique
 
         return if (richness(candidate) > richness(match)) DedupeDecision.ExistingIsDuplicate(match.id)
@@ -56,6 +63,7 @@ object Deduplicator {
         if (t.hasBalance) score += 1
         if (t.merchantKnown) score += 2
         if (!t.fromUpiApp) score += 1
+        if (!t.weak) score += 3
         return score
     }
 

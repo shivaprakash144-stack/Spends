@@ -34,6 +34,10 @@ object SmsDate {
         fmt("d-MMM-yyyy"), fmt2y("d-MMM-"),
         fmt("yyyy-MM-dd"),
         fmt("dd.MM.yyyy"), fmt2y("dd.MM."),
+        fmt("d MMM yyyy"), fmt2y("d MMM "),
+        fmt("d/M/yyyy"), fmt2y("d/M/"),
+        fmt("d-M-yyyy"), fmt2y("d-M-"),
+        fmt("dd MMMM yyyy"), fmt("d MMMM yyyy"),
     )
 
     fun parseDate(text: String?): LocalDate? {

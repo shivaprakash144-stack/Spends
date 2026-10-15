@@ -1,6 +1,26 @@
 package app.spendtracker.ui.settings
 
 import android.content.Context
+import android.app.Activity
+import android.app.PendingIntent
+import android.content.Intent
+import android.provider.Settings
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.IntentSenderRequest
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.material.icons.rounded.Description
+import androidx.compose.material.icons.rounded.Email
+import androidx.compose.material.icons.rounded.NotificationsActive
+import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
+import app.spendtracker.data.email.GmailClient
+import app.spendtracker.data.notify.BankNotificationListener
+import app.spendtracker.work.EmailSyncWorker
+import com.google.android.gms.auth.api.identity.Identity
+import com.google.android.gms.common.api.ApiException
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import android.os.Build
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -93,7 +113,61 @@ class SettingsViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
     private val settings: SettingsRepository,
     private val txns: TransactionRepository,
+    private val gmail: GmailClient,
 ) : ViewModel() {
+    val emailSync: StateFlow<ScanProgress?> = WorkManager.getInstance(context).getWorkInfosForUniqueWorkFlow(EmailSyncWorker.NAME)
+        .map { it.lastOrNull()?.toProgress() }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+    private val _gmailError = MutableStateFlow<String?>(null)
+    val gmailError: StateFlow<String?> = _gmailError.asStateFlow()
+
+    /** Starts Google's consent flow; [onNeedsConsent] launches the system consent screen. */
+    fun connectGmail(onNeedsConsent: (PendingIntent) -> Unit) = viewModelScope.launch {
+        _gmailError.value = null
+        try {
+            val r = gmail.authorize()
+            val pi = r.pendingIntent
+            if (r.hasResolution() && pi != null) onNeedsConsent(pi) else finishGmail()
+        } catch (e: Exception) {
+            _gmailError.value = gmailMessage(e)
+        }
+    }
+
+    fun onGmailConsent(data: Intent?) = viewModelScope.launch {
+        try {
+            Identity.getAuthorizationClient(context).getAuthorizationResultFromIntent(data ?: return@launch gmailCancelled())
+            finishGmail()
+        } catch (e: Exception) {
+            _gmailError.value = gmailMessage(e)
+        }
+    }
+
+    fun gmailCancelled() { _gmailError.value = "Gmail access was not granted." }
+
+    private suspend fun finishGmail() {
+        settings.setGmailConnected(true)
+        EmailSyncWorker.schedule(context)
+        EmailSyncWorker.syncNow(context)
+    }
+
+    fun syncEmail() = EmailSyncWorker.syncNow(context)
+
+    fun disconnectGmail() = viewModelScope.launch {
+        EmailSyncWorker.cancel(context)
+        gmail.revoke()
+        settings.setGmailConnected(false)
+    }
+
+    private fun gmailMessage(e: Exception): String {
+        val code = (e as? ApiException)?.statusCode
+        return when (code) {
+            10 -> "Google sign-in isn't set up for this app yet (error 10). Follow the Gmail setup steps in the README."
+            7 -> "No internet connection."
+            else -> "Couldn't connect Gmail (${code ?: e.javaClass.simpleName})."
+        }
+    }
+
     val state: StateFlow<AppSettings> = settings.settings.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), AppSettings(onboardingDone = true))
     val scan: StateFlow<ScanProgress?> = WorkManager.getInstance(context).getWorkInfosForUniqueWorkFlow(InboxScanWorker.NAME)
         .map { it.lastOrNull()?.toProgress() }
@@ -114,9 +188,23 @@ class SettingsViewModel @Inject constructor(
 }
 
 @Composable
-fun SettingsScreen(onCategories: () -> Unit, onAccounts: () -> Unit, onReview: () -> Unit, vm: SettingsViewModel = hiltViewModel()) {
+fun SettingsScreen(
+    onCategories: () -> Unit,
+    onAccounts: () -> Unit,
+    onReview: () -> Unit,
+    onImport: () -> Unit,
+    vm: SettingsViewModel = hiltViewModel(),
+) {
     val s by vm.state.collectAsStateWithLifecycle()
     val scan by vm.scan.collectAsStateWithLifecycle()
+    val emailSync by vm.emailSync.collectAsStateWithLifecycle()
+    val gmailError by vm.gmailError.collectAsStateWithLifecycle()
+    val context = LocalContext.current
+    var notifAccess by remember { mutableStateOf(BankNotificationListener.isEnabled(context)) }
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { notifAccess = BankNotificationListener.isEnabled(context) }
+    val consent = rememberLauncherForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { res ->
+        if (res.resultCode == Activity.RESULT_OK) vm.onGmailConsent(res.data) else vm.gmailCancelled()
+    }
     var budgetDialog by remember { mutableStateOf(false) }
     var resetDialog by remember { mutableStateOf(false) }
 
@@ -179,6 +267,63 @@ fun SettingsScreen(onCategories: () -> Unit, onAccounts: () -> Unit, onReview: (
                 }
             }
 
+            item { SectionTitle("Other sources", Modifier.padding(start = 4.dp, top = 8.dp)) }
+            item {
+                SectionCard(contentPadding = PaddingValues(vertical = 6.dp)) {
+                    NavRow(Icons.Rounded.Description, "Import bank statement", "PDF from your bank; missing transactions are added", onImport)
+                    Div()
+                    NavRow(
+                        Icons.Rounded.NotificationsActive,
+                        "Read notifications",
+                        if (notifAccess) "On: Gmail, bank and UPI app alerts are captured" else "Off: tap to allow notification access",
+                    ) {
+                        context.startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                    }
+                    Div()
+                    Column(Modifier.padding(horizontal = 20.dp, vertical = 12.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Rounded.Email, null, tint = MaterialTheme.colorScheme.primary)
+                            Spacer(Modifier.width(16.dp))
+                            Column(Modifier.weight(1f)) {
+                                Text("Gmail", style = MaterialTheme.typography.bodyLarge)
+                                Text(
+                                    when {
+                                        !s.gmailConnected -> "Read past and new bank alert emails (read-only)"
+                                        emailSync?.running == true -> "Syncing… ${emailSync?.done ?: 0} of ${emailSync?.total ?: 0}"
+                                        s.lastEmailSyncAt > 0 -> "Connected · last sync ${formatDay(s.lastEmailSyncAt)} · every 6 hours"
+                                        else -> "Connected"
+                                    },
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        }
+                        if (emailSync?.running == true) {
+                            val p = emailSync!!
+                            Spacer(Modifier.height(8.dp))
+                            LinearProgressIndicator(progress = { if (p.total > 0) p.done.toFloat() / p.total else 0f }, modifier = Modifier.fillMaxWidth())
+                        }
+                        gmailError?.let {
+                            Spacer(Modifier.height(6.dp))
+                            Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                        }
+                        if (emailSync?.failed == true && s.gmailConnected) {
+                            Spacer(Modifier.height(6.dp))
+                            Text("Last sync failed. Tap Reconnect if Google asks for access again.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                        }
+                        Row {
+                            if (!s.gmailConnected) {
+                                TextButton(onClick = { vm.connectGmail { pi -> consent.launch(IntentSenderRequest.Builder(pi.intentSender).build()) } }) { Text("Connect Gmail") }
+                            } else {
+                                TextButton(onClick = { vm.syncEmail() }, enabled = emailSync?.running != true) { Text("Sync now") }
+                                TextButton(onClick = { vm.connectGmail { pi -> consent.launch(IntentSenderRequest.Builder(pi.intentSender).build()) } }) { Text("Reconnect") }
+                                TextButton(onClick = { vm.disconnectGmail() }) { Text("Disconnect") }
+                            }
+                        }
+                    }
+                }
+            }
+
             item { SectionTitle("Security and look", Modifier.padding(start = 4.dp, top = 8.dp)) }
             item {
                 SectionCard(contentPadding = PaddingValues(vertical = 6.dp)) {
@@ -217,10 +362,10 @@ fun SettingsScreen(onCategories: () -> Unit, onAccounts: () -> Unit, onReview: (
                         Icon(Icons.Rounded.Shield, null, tint = MaterialTheme.colorScheme.primary)
                         Spacer(Modifier.width(16.dp))
                         Column {
-                            Text("Your SMS never leave this phone", style = MaterialTheme.typography.titleSmall)
+                            Text("Your data never leaves this phone", style = MaterialTheme.typography.titleSmall)
                             Spacer(Modifier.height(4.dp))
                             Text(
-                                "No internet permission, no account, no server. Data lives in an encrypted database whose key is protected by Android Keystore. It is excluded from cloud backups, and screenshots are blocked.",
+                                "No account and no server of ours. SMS, notifications and statements are read on this phone; Gmail, if you connect it, is read directly from Google to this phone (read-only). Everything is stored in an encrypted database whose key is protected by Android Keystore, excluded from cloud backups, and screenshots are blocked.",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )

@@ -10,7 +10,11 @@ import app.spendtracker.domain.dedupe.Deduplicator
 import app.spendtracker.domain.dedupe.TxnFingerprint
 import app.spendtracker.domain.model.AccountType
 import app.spendtracker.domain.model.ParseStatus
+import app.spendtracker.domain.model.TxnMode
 import app.spendtracker.domain.model.TxnSource
+import app.spendtracker.domain.model.TxnType
+import app.spendtracker.domain.statement.ParsedStatement
+import app.spendtracker.domain.statement.StatementRow
 import app.spendtracker.domain.parser.ParseResult
 import app.spendtracker.domain.parser.ParsedSms
 import kotlinx.coroutines.sync.Mutex
@@ -33,12 +37,24 @@ class SmsProcessor @Inject constructor(
 ) {
     private val mutex = Mutex()
 
+    /** Bank alert email (from Gmail sync). Stored in raw_sms with an "email:" sender so it can be re-parsed. */
+    suspend fun processEmail(from: String, subject: String, body: String, receivedAt: Long): ProcessOutcome =
+        process(EMAIL_PREFIX + from, SUBJECT_PREFIX + subject + "\n\n" + body.take(MAX_EMAIL_BODY), receivedAt, null)
+
+    /** Notification from Gmail or a bank / UPI app. */
+    suspend fun processNotification(packageName: String, title: String, text: String, postedAt: Long): ProcessOutcome =
+        process(NOTIF_PREFIX + packageName, title + "\n" + text, postedAt, null)
+
     suspend fun process(sender: String, body: String, receivedAt: Long, androidSmsId: Long?): ProcessOutcome = mutex.withLock {
         rules.ensureSeeded()
         val hash = sha256("${sender.uppercase().trim()}|$body")
         // Live receiver and inbox scan see the same SMS with slightly different times.
         val seen = db.rawSms().byHash(hash).any { abs(it.receivedAt - receivedAt) < SAME_SMS_WINDOW_MS }
         if (seen) return@withLock ProcessOutcome.ALREADY_SEEN
+        // Personal emails and app notifications that are not transactions are never stored.
+        if ((sender.startsWith(EMAIL_PREFIX) || sender.startsWith(NOTIF_PREFIX)) && parse(sender, body, receivedAt).first is ParseResult.Ignored) {
+            return@withLock ProcessOutcome.IGNORED
+        }
 
         val rawId = db.rawSms().insert(
             RawSmsEntity(sender = sender, body = body, receivedAt = receivedAt, parseStatus = ParseStatus.FAILED, hash = hash, androidSmsId = androidSmsId),
@@ -55,8 +71,23 @@ class SmsProcessor @Inject constructor(
         added
     }
 
+    private fun parse(sender: String, body: String, receivedAt: Long): Pair<ParseResult, TxnSource> = when {
+        sender.startsWith(EMAIL_PREFIX) -> {
+            val subject = body.substringBefore("\n\n").removePrefix(SUBJECT_PREFIX)
+            val text = body.substringAfter("\n\n", "")
+            rules.parser.parseEmail(sender.removePrefix(EMAIL_PREFIX), subject, text, receivedAt) to TxnSource.EMAIL
+        }
+        sender.startsWith(NOTIF_PREFIX) -> {
+            val title = body.substringBefore("\n")
+            val text = body.substringAfter("\n", "")
+            rules.parser.parseNotification(sender.removePrefix(NOTIF_PREFIX), title, text, receivedAt) to TxnSource.NOTIFICATION
+        }
+        else -> rules.parser.parse(sender, body, receivedAt) to TxnSource.SMS
+    }
+
     private suspend fun handle(rawId: Long, sender: String, body: String, receivedAt: Long, androidSmsId: Long?): ProcessOutcome {
-        return when (val r = rules.parser.parse(sender, body, receivedAt)) {
+        val (result, source) = parse(sender, body, receivedAt)
+        return when (val r = result) {
             is ParseResult.Ignored -> {
                 db.rawSms().setStatus(rawId, ParseStatus.IGNORED.name, r.reason)
                 ProcessOutcome.IGNORED
@@ -67,12 +98,12 @@ class SmsProcessor @Inject constructor(
             }
             is ParseResult.Parsed -> {
                 db.rawSms().setStatus(rawId, ParseStatus.PARSED.name, null)
-                store(r.sms, body, rawId, androidSmsId)
+                store(r.sms, body, rawId, androidSmsId, source)
             }
         }
     }
 
-    private suspend fun store(p: ParsedSms, body: String, rawId: Long, androidSmsId: Long?): ProcessOutcome {
+    private suspend fun store(p: ParsedSms, body: String, rawId: Long, androidSmsId: Long?, source: TxnSource): ProcessOutcome {
         val account = upsertAccount(p)
         val cat = rules.categorizer().categorize(p.merchantName, p.merchantRaw, body, p.type, p.mode)
         val categoryId = cat.categoryId ?: rules.uncategorisedId()
@@ -89,7 +120,7 @@ class SmsProcessor @Inject constructor(
             upiRef = p.upiRef,
             balancePaise = p.balancePaise,
             note = null,
-            source = TxnSource.SMS,
+            source = source,
             smsId = androidSmsId,
             smsHash = "raw:$rawId",
         )
@@ -127,6 +158,66 @@ class SmsProcessor @Inject constructor(
             }
         }
     }
+
+    // ---------------- Bank statement import ----------------
+
+    /** Indexes of [rows] that already exist (captured from SMS, email or an earlier import). */
+    suspend fun findStatementDuplicates(rows: List<StatementRow>): Set<Int> = mutex.withLock {
+        rows.indices.filter { i -> existingFor(rows[i]) != null }.toSet()
+    }
+
+    /** Inserts the rows that are not already captured. Returns how many were added. */
+    suspend fun importStatement(statement: ParsedStatement, rows: List<StatementRow>): Int = mutex.withLock {
+        rules.ensureSeeded()
+        val bankName = statement.bankHint ?: "Statement"
+        val bank = rules.parser.config.banks.firstOrNull { b ->
+            b.names.any { it.equals(bankName, true) } || b.name.contains(bankName, true) || bankName.contains(b.name, true)
+        }
+        val accountType = if (statement.isCreditCard) AccountType.CREDIT_CARD else AccountType.SAVINGS
+        val account = upsertAccount(
+            ParsedSms(
+                bankId = bank?.id ?: "statement-" + bankName.lowercase().replace(Regex("[^a-z0-9]+"), ""),
+                bankName = bank?.name ?: bankName, isUpiApp = false, amountPaise = 0, type = TxnType.DEBIT,
+                mode = TxnMode.OTHER, accountType = accountType, last4 = statement.last4, merchantRaw = null,
+                merchantName = "", upiRef = null, balancePaise = null, availableLimitPaise = null, timestamp = 0, patternId = "statement",
+            ),
+        )
+        val categorizer = rules.categorizer()
+        val uncategorised = rules.uncategorisedId()
+        var added = 0
+        var latest: StatementRow? = null
+        for (r in rows) {
+            if (existingFor(r) != null) continue
+            val cat = categorizer.categorize(r.merchantName, r.narration, r.narration, r.type, r.mode)
+            val id = db.transactions().insert(
+                TransactionEntity(
+                    amountPaise = r.amountPaise, type = r.type, timestamp = noon(r.date),
+                    merchantRaw = r.narration.take(200), merchantName = cat.displayName ?: r.merchantName,
+                    categoryId = cat.categoryId ?: uncategorised, accountId = account.id, mode = r.mode,
+                    upiRef = r.ref, balancePaise = r.balancePaise, note = null, source = TxnSource.STATEMENT,
+                    smsId = null, smsHash = null,
+                ),
+            )
+            if (id > 0) added++
+            if (r.balancePaise != null && (latest == null || !r.date.isBefore(latest.date))) latest = r
+        }
+        latest?.let { l ->
+            val ts = noon(l.date)
+            if ((account.lastBalanceAt ?: 0) < ts) db.accounts().update(account.copy(lastBalancePaise = l.balancePaise, lastBalanceAt = ts))
+        }
+        added
+    }
+
+    private suspend fun existingFor(r: StatementRow): TransactionEntity? {
+        val day = noon(r.date)
+        val candidates = db.transactions().findSameAmountBetween(r.amountPaise, day - 36 * HOUR, day + 36 * HOUR)
+        return candidates.firstOrNull { t ->
+            t.type == r.type && (r.ref == null || t.upiRef == null || t.upiRef == r.ref || t.upiRef.endsWith(r.ref) || r.ref.endsWith(t.upiRef))
+        }
+    }
+
+    private fun noon(d: java.time.LocalDate): Long =
+        d.atTime(12, 0).atZone(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli()
 
     private suspend fun detectSelfTransfer(txn: TransactionEntity, nearby: List<TransactionEntity>, accounts: Map<Long, AccountEntity>) {
         val counterpart = Deduplicator.findSelfTransfer(
@@ -178,10 +269,16 @@ class SmsProcessor @Inject constructor(
         merchantKnown = t.merchantName.isNotBlank() && t.merchantName != "Unknown",
         hasBalance = t.balancePaise != null,
         fromUpiApp = fromUpiApp,
+        weak = t.source == TxnSource.EMAIL || t.source == TxnSource.NOTIFICATION || t.source == TxnSource.STATEMENT,
     )
 
     companion object {
         const val SAME_SMS_WINDOW_MS = 10 * 60 * 1000L
+        private const val HOUR = 60 * 60 * 1000L
+        const val EMAIL_PREFIX = "email:"
+        const val NOTIF_PREFIX = "notif:"
+        private const val SUBJECT_PREFIX = "Subject: "
+        private const val MAX_EMAIL_BODY = 4000
         private val UPI_APP_IDS = setOf("paytm", "phonepe", "gpay")
 
         fun sha256(s: String): String =

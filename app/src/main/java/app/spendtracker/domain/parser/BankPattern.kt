@@ -7,7 +7,6 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import java.util.regex.Pattern
@@ -32,6 +31,12 @@ data class BankConfig(
     val isUpiApp: Boolean,
     val defaultAccountType: AccountType,
     val patterns: List<BankPattern>,
+    /** Domains bank alert emails come from, e.g. "hdfcbank.net". */
+    val emailDomains: List<String> = emptyList(),
+    /** Names as they appear in email sender names / notification titles, e.g. "HDFC Bank". */
+    val names: List<String> = emptyList(),
+    /** Android package names of the bank / UPI app whose notifications we read. */
+    val packages: List<String> = emptyList(),
 )
 
 data class PatternConfig(
@@ -39,6 +44,8 @@ data class PatternConfig(
     val banks: List<BankConfig>,
     val skipPatterns: List<Pattern>,
     val promoPatterns: List<Pattern>,
+    /** Email apps whose notifications are read (Gmail, Outlook). */
+    val emailApps: List<String> = emptyList(),
 ) {
     companion object {
         /** Shorthand tokens usable inside regex strings in bank_patterns.json. */
@@ -81,6 +88,9 @@ data class PatternConfig(
                     isUpiApp = b.str("kind") == "UPI_APP",
                     defaultAccountType = b.str("accountType")?.let { enumOrNull<AccountType>(it) } ?: AccountType.SAVINGS,
                     patterns = patterns,
+                    emailDomains = b.strings("emailDomains").map { it.lowercase() },
+                    names = b.strings("names"),
+                    packages = b.strings("packages"),
                 )
             }
             return PatternConfig(
@@ -88,6 +98,7 @@ data class PatternConfig(
                 banks = banks,
                 skipPatterns = skip,
                 promoPatterns = promo,
+                emailApps = root.strings("emailApps"),
             )
         }
 

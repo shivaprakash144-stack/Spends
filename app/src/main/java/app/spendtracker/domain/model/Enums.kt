@@ -4,7 +4,10 @@ enum class TxnType { DEBIT, CREDIT }
 
 enum class TxnMode { UPI, CARD, NEFT, IMPS, ATM, CASH, OTHER }
 
-enum class TxnSource { SMS, MANUAL }
+enum class TxnSource { SMS, MANUAL, EMAIL, NOTIFICATION, STATEMENT }
+
+/** Where an incoming message came from; decides how it is parsed. */
+enum class MessageKind { SMS, EMAIL, NOTIFICATION }
 
 enum class AccountType { SAVINGS, CREDIT_CARD, WALLET, CASH }
 

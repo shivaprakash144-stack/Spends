@@ -2,6 +2,8 @@
   "version": 1,
   "_doc": "Regexes are tried in order per bank, then a generic fallback. Named groups: amount, type, last4, merchant, ref, balance, limit, date. Macros: {AMT} amount, {CUR} Rs/INR/₹, {MASK} XX/** mask, {DATE} date token. Body whitespace (including new lines) is collapsed to single spaces before matching. Matching is case-insensitive.",
 
+  "emailApps": ["com.google.android.gm", "com.microsoft.office.outlook"],
+
   "skip": [
     "\\bOTP\\b",
     "one[ -]?time[ -]?pass(?:word|code)",
@@ -40,9 +42,24 @@
   "banks": [
     {
       "id": "hdfc",
+      "emailDomains": ["hdfcbank.net","hdfcbank.com","hdfcbank.bank.in"],
+      "names": ["HDFC Bank","HDFC"],
+      "packages": ["com.snapwork.hdfc","com.hdfcbank.payzapp"],
       "name": "HDFC Bank",
       "senders": ["HDFCBK", "HDFCBN", "HDFCBANK", "HDFCCC"],
       "patterns": [
+        {
+          "id": "hdfc-email-upi-debit",
+          "type": "DEBIT",
+          "mode": "UPI",
+          "regex": "{CUR}(?<amount>{AMT}) has been debited from (?:your )?(?:HDFC Bank )?account (?:no\\.? )?{MASK}(?<last4>\\d{4}) to (?:VPA )?(?<vpa>\\S+@\\S+) (?<merchant>.+?) on (?<date>{DATE})\\.?(?:.*?reference number is (?<ref>\\d+))?"
+        },
+        {
+          "id": "hdfc-email-card",
+          "type": "DEBIT",
+          "mode": "CARD",
+          "regex": "{CUR}(?<amount>{AMT}) (?:has been )?(?:debited|spent) (?:from|on) (?:your )?HDFC Bank (?:Credit |Debit )?Card (?:ending )?{MASK}(?<last4>\\d{4}) (?:towards|at) (?<merchant>.+?) on (?<date>{DATE})"
+        },
         {
           "id": "hdfc-upi-sent",
           "type": "DEBIT",
@@ -76,6 +93,9 @@
     },
     {
       "id": "icici",
+      "emailDomains": ["icicibank.com","icici.bank.in"],
+      "names": ["ICICI Bank","ICICI"],
+      "packages": ["com.csam.icici.bank.imobile"],
       "name": "ICICI Bank",
       "senders": ["ICICIB", "ICICIT", "ICICIBANK", "ICICIO"],
       "patterns": [
@@ -101,6 +121,9 @@
     },
     {
       "id": "sbi",
+      "emailDomains": ["sbi.co.in","sbicard.com","alerts.sbi.co.in","sbi.bank.in"],
+      "names": ["State Bank of India","SBI Card","SBI"],
+      "packages": ["com.sbi.lotusintouch","com.sbi.SBIFreedomPlus","com.sbi.upi","com.sbicard.mobile"],
       "name": "SBI",
       "senders": ["SBIUPI", "SBIINB", "SBIPSG", "SBMSMS", "CBSSBI", "ATMSBI", "SBICRD", "SBIBNK", "SBYONO"],
       "patterns": [
@@ -133,6 +156,9 @@
     },
     {
       "id": "axis",
+      "emailDomains": ["axisbank.com","axis.bank.in"],
+      "names": ["Axis Bank","Axis"],
+      "packages": ["com.axis.mobile"],
       "name": "Axis Bank",
       "senders": ["AXISBK", "AXISBN", "AXISBANK"],
       "patterns": [
@@ -163,6 +189,9 @@
     },
     {
       "id": "kotak",
+      "emailDomains": ["kotak.com","kotak.bank.in"],
+      "names": ["Kotak Mahindra Bank","Kotak Bank","Kotak"],
+      "packages": ["com.msf.kbank.mobile"],
       "name": "Kotak Bank",
       "senders": ["KOTAKB", "KOTAKBANK", "KMBLTD"],
       "patterns": [
@@ -188,6 +217,9 @@
     },
     {
       "id": "paytm",
+      "emailDomains": ["paytm.com","paytmbank.com"],
+      "names": ["Paytm"],
+      "packages": ["net.one97.paytm"],
       "name": "Paytm",
       "kind": "UPI_APP",
       "accountType": "WALLET",
@@ -211,11 +243,32 @@
     },
     {
       "id": "phonepe",
+      "emailDomains": ["phonepe.com"],
+      "names": ["PhonePe"],
+      "packages": ["com.phonepe.app"],
       "name": "PhonePe",
       "kind": "UPI_APP",
       "accountType": "SAVINGS",
       "senders": ["PHONPE", "PHONEPE"],
       "patterns": [
+        {
+          "id": "phonepe-notif-paid",
+          "type": "DEBIT",
+          "mode": "UPI",
+          "regex": "(?:You )?(?:paid|sent) {CUR}(?<amount>{AMT}) to (?<merchant>.+?)(?:\\.|$| using| via| from| on )"
+        },
+        {
+          "id": "phonepe-notif-amount-first",
+          "type": "DEBIT",
+          "mode": "UPI",
+          "regex": "{CUR}(?<amount>{AMT}) (?:paid|sent) to (?<merchant>.+?)(?:\\.|$| using| via| from| on )"
+        },
+        {
+          "id": "phonepe-notif-received",
+          "type": "CREDIT",
+          "mode": "UPI",
+          "regex": "(?:You )?received {CUR}(?<amount>{AMT}) from (?<merchant>.+?)(?:\\.|$| in | on )"
+        },
         {
           "id": "phonepe-paid",
           "type": "DEBIT",
@@ -232,11 +285,32 @@
     },
     {
       "id": "gpay",
+      "emailDomains": [],
+      "names": ["Google Pay","GPay"],
+      "packages": ["com.google.android.apps.nbu.paisa.user"],
       "name": "Google Pay",
       "kind": "UPI_APP",
       "accountType": "SAVINGS",
       "senders": ["GPAY", "GOOGLEPAY", "GOOGPY"],
       "patterns": [
+        {
+          "id": "gpay-notif-paid",
+          "type": "DEBIT",
+          "mode": "UPI",
+          "regex": "(?:You )?(?:paid|sent) {CUR}(?<amount>{AMT}) to (?<merchant>.+?)(?:\\.|$| using| via| from| on )"
+        },
+        {
+          "id": "gpay-notif-amount-first",
+          "type": "DEBIT",
+          "mode": "UPI",
+          "regex": "{CUR}(?<amount>{AMT}) (?:paid|sent) to (?<merchant>.+?)(?:\\.|$| using| via| from| on )"
+        },
+        {
+          "id": "gpay-notif-received",
+          "type": "CREDIT",
+          "mode": "UPI",
+          "regex": "(?:You )?received {CUR}(?<amount>{AMT}) from (?<merchant>.+?)(?:\\.|$| in | on )"
+        },
         {
           "id": "gpay-paid",
           "type": "DEBIT",

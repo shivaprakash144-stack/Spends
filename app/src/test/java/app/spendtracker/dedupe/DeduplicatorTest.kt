@@ -53,6 +53,22 @@ class DeduplicatorTest {
     }
 
     @Test
+    fun notificationWithoutRefMatchesSmsWithinThirtyMinutes() {
+        val sms = fp(1, ref = "628512345678", last4 = "1234", balance = true)
+        val notif = TxnFingerprint(0, 25000, TxnType.DEBIT, t0 + 12 * 60_000, null, null, null, true, false, true, weak = true)
+        assertEquals(DedupeDecision.NewIsDuplicate(1), Deduplicator.decide(notif, listOf(sms)))
+        // and the SMS arriving after the notification replaces it
+        assertEquals(DedupeDecision.ExistingIsDuplicate(0), Deduplicator.decide(sms.copy(id = 9), listOf(notif)))
+    }
+
+    @Test
+    fun weakRecordWithDifferentCardIsKept() {
+        val sms = fp(1, last4 = "1234")
+        val email = fp(0, at = t0 + 60_000, last4 = "9999").copy(weak = true)
+        assertEquals(DedupeDecision.Unique, Deduplicator.decide(email, listOf(sms)))
+    }
+
+    @Test
     fun selfTransferDetected() {
         val debit = fp(1, amount = 1_000_000, account = 10)
         val credit = fp(0, amount = 1_000_000, type = TxnType.CREDIT, at = t0 + 3 * 60_000, account = 11)

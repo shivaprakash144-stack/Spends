@@ -1,6 +1,6 @@
 # Spend Tracker (Android)
 
-A native Android app that reads bank and UPI SMS on the phone, turns each one into a debit or credit transaction, puts it in a spend category and shows where the money goes. Everything stays on the device: there's no account, no server and no `INTERNET` permission.
+A native Android app that reads bank and UPI SMS on the phone, turns each one into a debit or credit transaction, puts it in a spend category and shows where the money goes. To catch payments whose SMS never arrived, it can also read bank alert emails (Gmail), Gmail/bank/UPI-app notifications, and bank statement PDFs. Everything stays on the device: there's no account and no server. The only network use is reading your own Gmail, directly from Google, if you connect it.
 
 This is Phase 1 (MVP) of the build handoff, complete:
 
@@ -17,6 +17,39 @@ This is Phase 1 (MVP) of the build handoff, complete:
 - Review: uncategorised transactions and SMS the parser couldn't read, with quick fixes.
 - Settings: accounts (rename, latest balance or limit), categories (add, rename, recolour, merge, forget learned rules), app lock, scan range, re-scan, reset and rebuild, theme, wallpaper colours, and about and privacy.
 - Security: Room on SQLCipher, with a random key wrapped by Android Keystore. Biometric or device-PIN lock on open and after 1 minute away. `FLAG_SECURE`, no backups, and log calls are stripped from release builds.
+- Extra sources: bank statement PDF import, a notification reader (Gmail plus bank and UPI apps) and Gmail sync. See below.
+
+## Other sources (beyond SMS)
+
+All three end up in the same pipeline as SMS (parse, dedupe, categorise), so a payment seen in an SMS *and* an email *and* a notification is counted once.
+
+### 1. Bank statement PDF
+**Settings → Import bank statement → Choose statement PDF.**
+- Password-protected PDFs are supported. The password is used once and not stored.
+- Rows already captured from SMS, email or notifications are shown as "already captured" and skipped.
+- Debit vs credit comes from the Dr/Cr marker, then the running balance, then keywords. If a bank's layout comes out wrong, add an anonymised text extract to `StatementParserTest.kt`.
+- Scanned (image-only) PDFs can't be read.
+
+### 2. Notifications (offline)
+**Settings → Read notifications → turn Spend Tracker on.** If Android says "Restricted setting", go to Settings → Apps → Spend Tracker → ⋮ → **Allow restricted settings**, then try again.
+- Reads notifications only from Gmail, Outlook and the bank / UPI apps listed in `bank_patterns.json` (`emailApps` and each bank's `packages`). Every other app is ignored unread.
+- Non-transaction notifications are discarded, not stored.
+- Only catches new notifications from the moment it's turned on.
+
+### 3. Gmail (past + new bank emails)
+Read-only access via Google's on-device sign-in. One-time setup in Google Cloud (about 10 minutes, free):
+
+1. Go to **console.cloud.google.com** and create a project (e.g. "Spend Tracker").
+2. **APIs & Services → Library**: search for **Gmail API** and click **Enable**.
+3. **Google Auth Platform → Branding** (OAuth consent screen): app name "Spend Tracker", your email as the support and developer contact, then save. Under **Audience**, choose **External** and keep it in **Testing**, then add your Gmail address under **Test users**.
+4. **Data access → Add or remove scopes**: add `https://www.googleapis.com/auth/gmail.readonly` and save.
+5. **Clients → Create client → Android**:
+   - Package name: `app.spendtracker.debug`
+   - SHA-1: `7C:04:E2:D1:55:08:EA:9F:D0:9C:66:23:85:87:44:94:B8:6A:02:B4`
+   This SHA-1 belongs to `app/debug.keystore`, which is committed on purpose so that every GitHub build is signed with the same key. Don't use it for a Play Store release.
+6. In the app: **Settings → Gmail → Connect Gmail**, choose your account and allow access. On "Google hasn't verified this app", tap **Continue**; it's your own app.
+
+After that, emails sync every 6 hours (and with **Sync now**). The first sync goes back as far as the SMS scan range. While the Google project is in Testing mode, Google may ask you to approve again after about 7 days. If a sync fails, tap **Reconnect**.
 
 ## Build and install on your phone
 
@@ -47,15 +80,20 @@ Bank wording varies and changes over time, so the patterns are data, not code.
 app/src/main/java/app/spendtracker/
   data/db/          Room entities, DAOs, AppDatabase (SQLCipher)
   data/security/    DatabaseKeyManager (Keystore-wrapped DB key)
-  data/sms/         SmsReader (inbox), SmsReceiver (live), SmsProcessor (pipeline)
+  data/sms/         SmsReader (inbox), SmsReceiver (live), SmsProcessor (pipeline for every source)
+  data/notify/      BankNotificationListener
+  data/email/       GmailClient (read-only Gmail API)
+  data/statement/   StatementReader (PDF -> text via PDFBox)
   data/repository/  Transaction / Category / Account / Settings repos, RulesSource
   domain/parser/    ParserEngine, BankPattern, SenderFilter, MerchantCleaner, SmsDate
   domain/categorize/Categorizer, MerchantRules
   domain/dedupe/    Deduplicator (duplicates + self-transfers)
+  domain/statement/ StatementParser, NarrationCleaner
+  domain/email/     EmailText (Gmail JSON / HTML -> text)
   ui/...            Compose screens, theme, charts
-  work/             InboxScanWorker
+  work/             InboxScanWorker, EmailSyncWorker
 app/src/main/assets/ bank_patterns.json, merchant_rules.json
-app/src/test/        parser, categoriser, dedupe tests (38 tests)
+app/src/test/        parser, email/notification, statement, categoriser, dedupe tests (52 tests)
 ```
 
 ## Notes and deviations
@@ -63,4 +101,5 @@ app/src/test/        parser, categoriser, dedupe tests (38 tests)
 - **Charts:** these are drawn with Compose Canvas, not Vico. Vico has no donut chart, and Canvas keeps one consistent look with no third-party chart dependency. The Vico dependency can be added in Phase 2 if needed.
 - **UPI-app SMS:** the GPay and PhonePe patterns are best guesses, because those apps rarely send SMS. Bank SMS cover those payments anyway.
 - **Monthly budget:** this is a single overall budget for the Home budget bar. Per-category budgets and the 80% and 100% alerts are Phase 2.
+- **APK size:** only the 64-bit ARM (`arm64-v8a`) native code is included, which halves the APK. Every recent phone, including the Moto G73, is 64-bit ARM.
 - **Play Store release:** you will need the SMS Permissions Declaration ("SMS-based money management"), a privacy policy page and the Data safety form ("no data collected"). None of this is needed for a debug APK installed over USB.

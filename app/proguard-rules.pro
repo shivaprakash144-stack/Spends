@@ -11,3 +11,8 @@
     public static int w(...);
     public static int e(...);
 }
+
+# PDFBox (statement import)
+-keep class com.tom_roush.pdfbox.** { *; }
+-dontwarn com.gemalto.jp2.**
+-dontwarn org.bouncycastle.**

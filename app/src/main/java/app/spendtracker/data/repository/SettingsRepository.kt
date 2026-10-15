@@ -26,6 +26,8 @@ data class AppSettings(
     val dynamicColour: Boolean = false,
     val monthlyBudgetPaise: Long = 0,
     val lastScanAt: Long = 0,
+    val gmailConnected: Boolean = false,
+    val lastEmailSyncAt: Long = 0,
 )
 
 private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "settings")
@@ -41,6 +43,8 @@ class SettingsRepository @Inject constructor(@ApplicationContext private val con
         val dynamic = booleanPreferencesKey("dynamic_colour")
         val budget = longPreferencesKey("monthly_budget_paise")
         val lastScan = longPreferencesKey("last_scan_at")
+        val gmail = booleanPreferencesKey("gmail_connected")
+        val lastEmail = longPreferencesKey("last_email_sync_at")
     }
 
     val settings: Flow<AppSettings> = context.dataStore.data.map { p ->
@@ -52,6 +56,8 @@ class SettingsRepository @Inject constructor(@ApplicationContext private val con
             dynamicColour = p[K.dynamic] ?: false,
             monthlyBudgetPaise = p[K.budget] ?: 0L,
             lastScanAt = p[K.lastScan] ?: 0L,
+            gmailConnected = p[K.gmail] ?: false,
+            lastEmailSyncAt = p[K.lastEmail] ?: 0L,
         )
     }
 
@@ -64,4 +70,6 @@ class SettingsRepository @Inject constructor(@ApplicationContext private val con
     suspend fun setDynamicColour(enabled: Boolean) = context.dataStore.edit { it[K.dynamic] = enabled }
     suspend fun setMonthlyBudget(paise: Long) = context.dataStore.edit { it[K.budget] = paise.coerceAtLeast(0) }
     suspend fun setLastScanAt(at: Long) = context.dataStore.edit { it[K.lastScan] = at }
+    suspend fun setGmailConnected(v: Boolean) = context.dataStore.edit { it[K.gmail] = v; if (!v) it[K.lastEmail] = 0L }
+    suspend fun setLastEmailSyncAt(at: Long) = context.dataStore.edit { it[K.lastEmail] = at }
 }

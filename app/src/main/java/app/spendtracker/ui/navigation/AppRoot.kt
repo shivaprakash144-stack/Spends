@@ -50,6 +50,7 @@ import app.spendtracker.ui.addedit.AddEditScreen
 import app.spendtracker.ui.categories.CategoriesScreen
 import app.spendtracker.ui.dashboard.HomeScreen
 import app.spendtracker.ui.detail.DetailScreen
+import app.spendtracker.ui.importer.ImportStatementScreen
 import app.spendtracker.ui.insights.InsightsScreen
 import app.spendtracker.ui.onboarding.OnboardingScreen
 import app.spendtracker.ui.review.ReviewScreen
@@ -78,6 +79,7 @@ object Routes {
     const val REVIEW = "review"
     const val CATEGORIES = "categories"
     const val ACCOUNTS = "accounts"
+    const val IMPORT = "import"
 
     fun detail(id: Long) = "detail/$id"
     fun edit(id: Long? = null) = if (id == null) "edit" else "edit?id=$id"
@@ -168,8 +170,10 @@ private fun MainScaffold() {
                     onCategories = { nav.navigate(Routes.CATEGORIES) },
                     onAccounts = { nav.navigate(Routes.ACCOUNTS) },
                     onReview = { nav.navigate(Routes.REVIEW) },
+                    onImport = { nav.navigate(Routes.IMPORT) },
                 )
             }
+            composable(Routes.IMPORT) { ImportStatementScreen(onBack = { nav.popBackStack() }) }
             composable(Routes.DETAIL, arguments = listOf(navArgument("id") { type = NavType.LongType })) {
                 DetailScreen(onBack = { nav.popBackStack() }, onEdit = { id -> nav.navigate(Routes.edit(id)) })
             }

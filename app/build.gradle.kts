@@ -18,10 +18,24 @@ android {
         versionName = "1.0.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables { useSupportLibrary = true }
+        // Every phone sold in the last several years is 64-bit ARM; this halves the APK size.
+        ndk { abiFilters += listOf("arm64-v8a") }
+    }
+
+    signingConfigs {
+        // Fixed debug key (committed on purpose) so the Gmail OAuth client's SHA-1 never changes
+        // between GitHub builds. Do NOT use this key for a Play Store release.
+        getByName("debug") {
+            storeFile = file("debug.keystore")
+            storePassword = "android"
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
+        }
     }
 
     buildTypes {
         debug {
+            signingConfig = signingConfigs.getByName("debug")
             applicationIdSuffix = ".debug"
             versionNameSuffix = "-debug"
         }
@@ -97,6 +111,9 @@ dependencies {
     implementation(libs.androidx.biometric)
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.kotlinx.serialization.json)
+    implementation(libs.play.services.auth)
+    implementation(libs.kotlinx.coroutines.play.services)
+    implementation(libs.pdfbox.android)
 
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)

@@ -149,6 +149,17 @@ fun DetailScreen(onBack: () -> Unit, onEdit: (Long) -> Unit, vm: DetailViewModel
                     Field("Account", r.accountName ?: "—")
                     Divider()
                     Field("Mode", r.t.mode.label())
+                    Divider()
+                    Field(
+                        "Captured from",
+                        when (r.t.source) {
+                            TxnSource.SMS -> "SMS"
+                            TxnSource.MANUAL -> "Manual entry"
+                            TxnSource.EMAIL -> "Gmail"
+                            TxnSource.NOTIFICATION -> "Notification"
+                            TxnSource.STATEMENT -> "Bank statement"
+                        },
+                    )
                     r.t.upiRef?.let { Divider(); Field("Reference", it) }
                     r.t.balancePaise?.let { Divider(); Field("Balance after", Money.format(it)) }
                     Divider()
@@ -176,7 +187,7 @@ fun DetailScreen(onBack: () -> Unit, onEdit: (Long) -> Unit, vm: DetailViewModel
             sms?.let { raw ->
                 item {
                     SectionCard {
-                        Text("ORIGINAL SMS · ${raw.sender}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("ORIGINAL MESSAGE · ${raw.sender.removePrefix("notif:").removePrefix("email:")}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Spacer(Modifier.height(8.dp))
                         Surface(shape = RoundedCornerShape(16.dp), color = MaterialTheme.colorScheme.surfaceContainer) {
                             Text(raw.body, style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace), modifier = Modifier.padding(14.dp))

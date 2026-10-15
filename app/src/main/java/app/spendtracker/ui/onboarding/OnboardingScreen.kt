@@ -150,8 +150,8 @@ fun OnboardingScreen(vm: OnboardingViewModel = hiltViewModel()) {
                 )
                 1 -> InfoCard(
                     Icons.Rounded.Shield,
-                    "Your SMS never leave this phone",
-                    "The app has no internet permission at all, so nothing can be uploaded. Data is stored in an encrypted database, the app locks with your fingerprint or PIN and screenshots are blocked.",
+                    "Your data never leaves this phone",
+                    "There is no account and no server: nothing is ever uploaded. If you choose to connect Gmail later, mail is read directly from Google to this phone. Data is stored in an encrypted database, the app locks with your fingerprint or PIN and screenshots are blocked.",
                 )
                 2 -> PermissionCard(
                     months = months,

@@ -19,6 +19,12 @@ This is Phase 1 (MVP) of the build handoff, complete:
 - Security: Room on SQLCipher, with a random key wrapped by Android Keystore. Biometric or device-PIN lock on open and after 1 minute away. `FLAG_SECURE`, no backups, and log calls are stripped from release builds.
 - Extra sources: bank statement PDF import, a notification reader (Gmail plus bank and UPI apps) and Gmail sync. See below.
 
+## Bills, daily summary and date filters
+
+- **Bills and due dates:** credit-card dues, EMIs and electricity, mobile, broadband, gas, water and insurance reminders are picked up from SMS, emails and notifications. They show on Home under "Upcoming bills" and in **Settings → Bills and due dates**. A bill is marked paid automatically when a payment of the same amount (total or minimum due) arrives, and you can mark it paid or dismiss it yourself.
+- **Daily summary:** every evening (9 PM by default, adjustable in **Settings → Notifications**) you get a notification with today's spend, the top category, budget left and bills due in the next 3 days. **Send today's summary now** tests it straight away.
+- **Date filters:** Home and Transactions have Today, Yesterday, This week, This month, Last month and **Pick dates** for any custom range. Tapping a category in "Where it went" opens its transactions for the same period.
+
 ## Other sources (beyond SMS)
 
 All three end up in the same pipeline as SMS (parse, dedupe, categorise), so a payment seen in an SMS *and* an email *and* a notification is counted once.
@@ -47,9 +53,9 @@ Read-only access via Google's on-device sign-in. One-time setup in Google Cloud 
    - Package name: `app.spendtracker.debug`
    - SHA-1: `7C:04:E2:D1:55:08:EA:9F:D0:9C:66:23:85:87:44:94:B8:6A:02:B4`
    This SHA-1 belongs to `app/debug.keystore`, which is committed on purpose so that every GitHub build is signed with the same key. Don't use it for a Play Store release.
-6. In the app: **Settings → Gmail → Connect Gmail**, choose your account and allow access. On "Google hasn't verified this app", tap **Continue**; it's your own app.
+6. In the app: **Settings → Gmail → Connect Gmail**, pick your Google account in the phone's account chooser, then allow "Read your email" on Google's screen. On "Google hasn't verified this app", tap **Continue**; it's your own app.
 
-After that, emails sync every 6 hours (and with **Sync now**). The first sync goes back as far as the SMS scan range. While the Google project is in Testing mode, Google may ask you to approve again after about 7 days. If a sync fails, tap **Reconnect**.
+After that, emails sync every 6 hours (and with **Sync now**). The first sync goes back as far as the SMS scan range. If anything is misconfigured, the exact reason appears in red under Gmail (for example, a package name / SHA-1 mismatch or the Gmail API not being enabled). While the Google project is in Testing mode, Google may ask you to approve again after about 7 days; tap **Approve access** when shown.
 
 ## Build and install on your phone
 

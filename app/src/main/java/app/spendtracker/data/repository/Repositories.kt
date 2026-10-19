@@ -164,3 +164,16 @@ class AccountRepository @Inject constructor(private val db: AppDatabase) {
     suspend fun cash(): AccountEntity? = db.accounts().cashAccount()
     fun isOwnCard(a: AccountEntity) = a.type == AccountType.CREDIT_CARD
 }
+
+@Singleton
+class BillRepository @Inject constructor(private val db: AppDatabase) {
+    /** Open bills due from a week ago onwards (recently overdue ones stay visible). */
+    fun observeUpcoming(today: java.time.LocalDate = java.time.LocalDate.now()): Flow<List<app.spendtracker.data.db.BillEntity>> =
+        db.bills().observeDueFrom(today.minusDays(7).toEpochDay())
+
+    fun observeAll(): Flow<List<app.spendtracker.data.db.BillEntity>> = db.bills().observeAll()
+
+    suspend fun markPaid(id: Long) = db.bills().setStatus(id, "PAID", null)
+    suspend fun dismiss(id: Long) = db.bills().setStatus(id, "DISMISSED", null)
+    suspend fun reopen(id: Long) = db.bills().setStatus(id, "DUE", null)
+}

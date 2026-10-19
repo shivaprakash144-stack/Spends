@@ -125,3 +125,25 @@ data class TxnRow(
     @ColumnInfo(name = "accLast4") val accountLast4: String?,
     @ColumnInfo(name = "accType") val accountType: AccountType?,
 )
+
+/** A bill / due-date reminder captured from SMS, email or a notification. Dates are epoch days. */
+@Entity(
+    tableName = "bills",
+    indices = [Index(value = ["dedupeKey"], unique = true), Index("dueDate")],
+)
+data class BillEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val biller: String,
+    /** BillKind name. */
+    val kind: String,
+    val amountPaise: Long,
+    val minDuePaise: Long?,
+    val dueDate: Long,
+    val last4: String?,
+    /** DUE, PAID or DISMISSED. */
+    val status: String,
+    val sourceText: String,
+    val dedupeKey: String,
+    val createdAt: Long,
+    val paidTxnId: Long?,
+)

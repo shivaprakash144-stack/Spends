@@ -59,7 +59,11 @@ import app.spendtracker.data.db.TxnRow
 import app.spendtracker.data.repository.AccountRepository
 import app.spendtracker.data.repository.CategoryRepository
 import app.spendtracker.data.repository.TransactionRepository
-import app.spendtracker.data.repository.startMillis
+import app.spendtracker.domain.util.Period
+import app.spendtracker.domain.util.PeriodKind
+import app.spendtracker.ui.components.PeriodChips
+import androidx.lifecycle.SavedStateHandle
+import androidx.compose.foundation.layout.height
 import app.spendtracker.domain.model.TxnMode
 import app.spendtracker.domain.model.TxnType
 import app.spendtracker.domain.model.label
@@ -79,13 +83,10 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.time.Instant
 import java.time.LocalDate
-import java.time.YearMonth
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 import javax.inject.Inject
-
-enum class Period(val label: String) { THIS_MONTH("This month"), LAST_MONTH("Last month"), THREE_MONTHS("3 months"), ALL("All time") }
 
 data class TxnFilters(
     val query: String = "",
@@ -109,24 +110,25 @@ data class TxnListState(
 
 @HiltViewModel
 class TransactionsViewModel @Inject constructor(
+    savedState: SavedStateHandle,
     private val repo: TransactionRepository,
     categories: CategoryRepository,
     accounts: AccountRepository,
 ) : ViewModel() {
 
-    private val filters = MutableStateFlow(TxnFilters())
+    // Opened from Home ("Where it went" row / "See all") with a category and period preset.
+    private val filters = MutableStateFlow(
+        TxnFilters(
+            categoryId = savedState.get<Long>("categoryId")?.takeIf { it > 0 },
+            period = Period.decode(savedState.get<String>("period")) ?: Period.THIS_MONTH,
+        ),
+    )
 
     val state: StateFlow<TxnListState> = combine(
         repo.observeAll(), filters, categories.observe(), accounts.observe(),
     ) { all, f, cats, accs ->
         val zone = ZoneId.systemDefault()
-        val now = YearMonth.now()
-        val (from, to) = when (f.period) {
-            Period.THIS_MONTH -> now.startMillis() to Long.MAX_VALUE
-            Period.LAST_MONTH -> now.minusMonths(1).startMillis() to now.startMillis()
-            Period.THREE_MONTHS -> now.minusMonths(2).startMillis() to Long.MAX_VALUE
-            Period.ALL -> 0L to Long.MAX_VALUE
-        }
+        val (from, to) = f.period.millis(LocalDate.now(), zone)
         val q = f.query.trim().lowercase()
         val rows = all.filter { r ->
             r.t.timestamp in from until to &&
@@ -184,7 +186,7 @@ fun TransactionsScreen(onOpen: (Long) -> Unit, onAdd: () -> Unit, vm: Transactio
             item {
                 Text("Transactions", style = MaterialTheme.typography.headlineMedium, modifier = Modifier.padding(start = 20.dp, top = 16.dp, end = 20.dp))
                 Text(
-                    "${s.count} entries · ${Money.format(s.spent)} spent",
+                    "${s.filters.period.label(LocalDate.now())} · ${s.count} entries · ${Money.format(s.spent)} spent",
                     style = MaterialTheme.typography.bodyMedium.merge(AmountStyle),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(horizontal = 20.dp),
@@ -206,6 +208,12 @@ fun TransactionsScreen(onOpen: (Long) -> Unit, onAdd: () -> Unit, vm: Transactio
                     ),
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
                 )
+                PeriodChips(
+                    selected = s.filters.period,
+                    onSelect = { p -> vm.setFilters { it.copy(period = p) } },
+                    kinds = listOf(PeriodKind.TODAY, PeriodKind.YESTERDAY, PeriodKind.THIS_WEEK, PeriodKind.THIS_MONTH, PeriodKind.LAST_MONTH, PeriodKind.LAST_3_MONTHS, PeriodKind.ALL),
+                )
+                Spacer(Modifier.height(8.dp))
                 FilterRow(s, vm)
             }
             if (s.groups.isEmpty()) {
@@ -306,7 +314,6 @@ private fun FilterRow(s: TxnListState, vm: TransactionsViewModel) {
         Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        MenuChip(f.period.label, true, Period.entries.map { it.label to { vm.setFilters { x -> x.copy(period = it) } } })
         MenuChip(
             when (f.type) { TxnType.DEBIT -> "Spent"; TxnType.CREDIT -> "Received"; null -> "Type" },
             f.type != null,

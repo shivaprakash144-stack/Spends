@@ -28,6 +28,13 @@ data class AppSettings(
     val lastScanAt: Long = 0,
     val gmailConnected: Boolean = false,
     val lastEmailSyncAt: Long = 0,
+    /** Google account picked for Gmail sync. */
+    val gmailAccount: String? = null,
+    val dailySummary: Boolean = true,
+    /** Hour of day (0-23) for the end-of-day summary notification. */
+    val summaryHour: Int = 21,
+    /** Set once the bill backfill re-scan has run after the update that added bills. */
+    val billsBackfilled: Boolean = false,
 )
 
 private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "settings")
@@ -45,6 +52,10 @@ class SettingsRepository @Inject constructor(@ApplicationContext private val con
         val lastScan = longPreferencesKey("last_scan_at")
         val gmail = booleanPreferencesKey("gmail_connected")
         val lastEmail = longPreferencesKey("last_email_sync_at")
+        val gmailAccount = stringPreferencesKey("gmail_account")
+        val daily = booleanPreferencesKey("daily_summary")
+        val summaryHour = intPreferencesKey("summary_hour")
+        val billsBackfilled = booleanPreferencesKey("bills_backfilled")
     }
 
     val settings: Flow<AppSettings> = context.dataStore.data.map { p ->
@@ -58,6 +69,10 @@ class SettingsRepository @Inject constructor(@ApplicationContext private val con
             lastScanAt = p[K.lastScan] ?: 0L,
             gmailConnected = p[K.gmail] ?: false,
             lastEmailSyncAt = p[K.lastEmail] ?: 0L,
+            gmailAccount = p[K.gmailAccount],
+            dailySummary = p[K.daily] ?: true,
+            summaryHour = p[K.summaryHour] ?: 21,
+            billsBackfilled = p[K.billsBackfilled] ?: false,
         )
     }
 
@@ -72,4 +87,17 @@ class SettingsRepository @Inject constructor(@ApplicationContext private val con
     suspend fun setLastScanAt(at: Long) = context.dataStore.edit { it[K.lastScan] = at }
     suspend fun setGmailConnected(v: Boolean) = context.dataStore.edit { it[K.gmail] = v; if (!v) it[K.lastEmail] = 0L }
     suspend fun setLastEmailSyncAt(at: Long) = context.dataStore.edit { it[K.lastEmail] = at }
+    suspend fun setGmailAccount(email: String?) = context.dataStore.edit {
+        if (email == null) {
+            it.remove(K.gmailAccount)
+            it[K.gmail] = false
+            it[K.lastEmail] = 0L
+        } else {
+            it[K.gmailAccount] = email
+            it[K.gmail] = true
+        }
+    }
+    suspend fun setDailySummary(v: Boolean) = context.dataStore.edit { it[K.daily] = v }
+    suspend fun setSummaryHour(h: Int) = context.dataStore.edit { it[K.summaryHour] = h.coerceIn(0, 23) }
+    suspend fun setBillsBackfilled() = context.dataStore.edit { it[K.billsBackfilled] = true }
 }

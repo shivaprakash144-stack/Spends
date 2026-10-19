@@ -1,12 +1,18 @@
 package app.spendtracker.ui.settings
 
 import android.content.Context
+import android.Manifest
+import android.accounts.AccountManager
 import android.app.Activity
-import android.app.PendingIntent
+import android.content.pm.PackageManager
+import androidx.compose.runtime.LaunchedEffect
+import androidx.core.content.ContextCompat
+import androidx.compose.material.icons.automirrored.rounded.ReceiptLong
+import app.spendtracker.data.email.TokenResult
+import app.spendtracker.work.DailySummaryWorker
 import android.content.Intent
 import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.material.icons.rounded.Description
 import androidx.compose.material.icons.rounded.Email
@@ -14,11 +20,11 @@ import androidx.compose.material.icons.rounded.NotificationsActive
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
+import app.spendtracker.data.email.EmailSyncOutcome
+import app.spendtracker.data.email.EmailSyncer
 import app.spendtracker.data.email.GmailClient
 import app.spendtracker.data.notify.BankNotificationListener
 import app.spendtracker.work.EmailSyncWorker
-import com.google.android.gms.auth.api.identity.Identity
-import com.google.android.gms.common.api.ApiException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import android.os.Build
@@ -114,6 +120,7 @@ class SettingsViewModel @Inject constructor(
     private val settings: SettingsRepository,
     private val txns: TransactionRepository,
     private val gmail: GmailClient,
+    private val syncer: EmailSyncer,
 ) : ViewModel() {
     val emailSync: StateFlow<ScanProgress?> = WorkManager.getInstance(context).getWorkInfosForUniqueWorkFlow(EmailSyncWorker.NAME)
         .map { it.lastOrNull()?.toProgress() }
@@ -122,51 +129,95 @@ class SettingsViewModel @Inject constructor(
     private val _gmailError = MutableStateFlow<String?>(null)
     val gmailError: StateFlow<String?> = _gmailError.asStateFlow()
 
-    /** Starts Google's consent flow; [onNeedsConsent] launches the system consent screen. */
-    fun connectGmail(onNeedsConsent: (PendingIntent) -> Unit) = viewModelScope.launch {
+    /** Google's approval screen to show; the UI launches it and calls [consentShown]. */
+    private val _consentRequest = MutableStateFlow<Intent?>(null)
+    val consentRequest: StateFlow<Intent?> = _consentRequest.asStateFlow()
+    fun consentShown() { _consentRequest.value = null }
+
+    /** Foreground sync state (right after connecting, and "Sync now"). */
+    private val _fgSync = MutableStateFlow<ScanProgress?>(null)
+    val fgSync: StateFlow<ScanProgress?> = _fgSync.asStateFlow()
+
+    private var pendingEmail: String? = null
+    private var consentAttempts = 0
+
+    fun accountPickerIntent(): Intent = gmail.accountPickerIntent()
+
+    /** Step 1: the user picked a Google account in the system chooser. */
+    fun onAccountPicked(email: String?) = viewModelScope.launch {
+        if (email.isNullOrBlank()) {
+            _gmailError.value = "No account was chosen."
+            return@launch
+        }
+        pendingEmail = email
+        consentAttempts = 0
+        requestToken(email)
+    }
+
+    /** Step 2: back from Google's "allow Spend Tracker to read your email" screen. */
+    fun onConsentResult(approved: Boolean) = viewModelScope.launch {
+        val email = pendingEmail ?: state.value.gmailAccount ?: return@launch
+        if (!approved) {
+            _gmailError.value = "Gmail access was not approved, so emails can't be read. Tap Connect Gmail to try again."
+            return@launch
+        }
+        requestToken(email)
+    }
+
+    fun approveAgain() = viewModelScope.launch {
+        val email = state.value.gmailAccount ?: return@launch
+        pendingEmail = email
+        consentAttempts = 0
+        requestToken(email)
+    }
+
+    private suspend fun requestToken(email: String) {
         _gmailError.value = null
-        try {
-            val r = gmail.authorize()
-            val pi = r.pendingIntent
-            if (r.hasResolution() && pi != null) onNeedsConsent(pi) else finishGmail()
-        } catch (e: Exception) {
-            _gmailError.value = gmailMessage(e)
+        when (val t = gmail.token(email)) {
+            is TokenResult.Ok -> {
+                settings.setGmailAccount(email)
+                EmailSyncWorker.schedule(context)
+                runForeground()
+            }
+            is TokenResult.NeedsConsent -> {
+                if (consentAttempts++ < 2) _consentRequest.value = t.intent
+                else _gmailError.value = "Google keeps asking for approval. Check that your Gmail is a Test user in Google Cloud (Audience > Test users)."
+            }
+            is TokenResult.Error -> _gmailError.value = t.message
         }
     }
 
-    fun onGmailConsent(data: Intent?) = viewModelScope.launch {
-        try {
-            Identity.getAuthorizationClient(context).getAuthorizationResultFromIntent(data ?: return@launch gmailCancelled())
-            finishGmail()
-        } catch (e: Exception) {
-            _gmailError.value = gmailMessage(e)
+    private suspend fun runForeground() {
+        _fgSync.value = ScanProgress(running = true, finished = false, done = 0, total = 0, found = 0, failed = false)
+        val r = syncer.run { d, t, f -> _fgSync.value = ScanProgress(true, false, d, t, f, false) }
+        _fgSync.value = when (r) {
+            is EmailSyncOutcome.Ok -> ScanProgress(false, true, r.done, r.total, r.found, false)
+            is EmailSyncOutcome.Err -> ScanProgress(false, false, 0, 0, 0, true, if (r.consent) "consent:" + r.message else r.message)
         }
     }
 
-    fun gmailCancelled() { _gmailError.value = "Gmail access was not granted." }
-
-    private suspend fun finishGmail() {
-        settings.setGmailConnected(true)
-        EmailSyncWorker.schedule(context)
-        EmailSyncWorker.syncNow(context)
-    }
-
-    fun syncEmail() = EmailSyncWorker.syncNow(context)
+    fun syncEmail() = viewModelScope.launch { runForeground() }
 
     fun disconnectGmail() = viewModelScope.launch {
         EmailSyncWorker.cancel(context)
-        gmail.revoke()
-        settings.setGmailConnected(false)
+        settings.setGmailAccount(null)
+        pendingEmail = null
+        _fgSync.value = null
+        _gmailError.value = null
     }
 
-    private fun gmailMessage(e: Exception): String {
-        val code = (e as? ApiException)?.statusCode
-        return when (code) {
-            10 -> "Google sign-in isn't set up for this app yet (error 10). Follow the Gmail setup steps in the README."
-            7 -> "No internet connection."
-            else -> "Couldn't connect Gmail (${code ?: e.javaClass.simpleName})."
-        }
+    // ---- Daily summary ----
+    fun setDailySummary(on: Boolean) = viewModelScope.launch {
+        settings.setDailySummary(on)
+        if (on) DailySummaryWorker.schedule(context, state.value.summaryHour, replace = true) else DailySummaryWorker.cancel(context)
     }
+
+    fun setSummaryHour(h: Int) = viewModelScope.launch {
+        settings.setSummaryHour(h)
+        if (state.value.dailySummary) DailySummaryWorker.schedule(context, h, replace = true)
+    }
+
+    fun sendTestSummary() = DailySummaryWorker.runNow(context)
 
     val state: StateFlow<AppSettings> = settings.settings.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), AppSettings(onboardingDone = true))
     val scan: StateFlow<ScanProgress?> = WorkManager.getInstance(context).getWorkInfosForUniqueWorkFlow(InboxScanWorker.NAME)
@@ -193,17 +244,31 @@ fun SettingsScreen(
     onAccounts: () -> Unit,
     onReview: () -> Unit,
     onImport: () -> Unit,
+    onBills: () -> Unit,
     vm: SettingsViewModel = hiltViewModel(),
 ) {
     val s by vm.state.collectAsStateWithLifecycle()
     val scan by vm.scan.collectAsStateWithLifecycle()
-    val emailSync by vm.emailSync.collectAsStateWithLifecycle()
+    val bgSync by vm.emailSync.collectAsStateWithLifecycle()
+    val fgSync by vm.fgSync.collectAsStateWithLifecycle()
+    // The foreground run (connect / Sync now) wins over the background worker's last state.
+    val emailSync = fgSync ?: bgSync
     val gmailError by vm.gmailError.collectAsStateWithLifecycle()
     val context = LocalContext.current
     var notifAccess by remember { mutableStateOf(BankNotificationListener.isEnabled(context)) }
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { notifAccess = BankNotificationListener.isEnabled(context) }
-    val consent = rememberLauncherForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { res ->
-        if (res.resultCode == Activity.RESULT_OK) vm.onGmailConsent(res.data) else vm.gmailCancelled()
+    val consentRequest by vm.consentRequest.collectAsStateWithLifecycle()
+    val consent = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { res ->
+        vm.onConsentResult(res.resultCode == Activity.RESULT_OK)
+    }
+    LaunchedEffect(consentRequest) {
+        consentRequest?.let { consent.launch(it); vm.consentShown() }
+    }
+    val picker = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { res ->
+        if (res.resultCode == Activity.RESULT_OK) vm.onAccountPicked(res.data?.getStringExtra(AccountManager.KEY_ACCOUNT_NAME))
+    }
+    val notifPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) vm.setDailySummary(true)
     }
     var budgetDialog by remember { mutableStateOf(false) }
     var resetDialog by remember { mutableStateOf(false) }
@@ -222,6 +287,8 @@ fun SettingsScreen(
                     NavRow(Icons.Rounded.AccountBalance, "Accounts", "Banks, cards and wallets found in SMS", onAccounts)
                     Div()
                     NavRow(Icons.Rounded.Category, "Categories", "Add, rename, recolour and merge", onCategories)
+                    Div()
+                    NavRow(Icons.AutoMirrored.Rounded.ReceiptLong, "Bills and due dates", "Credit card dues, EMIs and utility bills found in messages", onBills)
                     Div()
                     NavRow(Icons.Rounded.Inbox, "Review", "Uncategorised and unread SMS", onReview)
                     Div()
@@ -288,10 +355,11 @@ fun SettingsScreen(
                                 Text("Gmail", style = MaterialTheme.typography.bodyLarge)
                                 Text(
                                     when {
-                                        !s.gmailConnected -> "Read past and new bank alert emails (read-only)"
-                                        emailSync?.running == true -> "Syncing… ${emailSync?.done ?: 0} of ${emailSync?.total ?: 0}"
-                                        s.lastEmailSyncAt > 0 -> "Connected · last sync ${formatDay(s.lastEmailSyncAt)} · every 6 hours"
-                                        else -> "Connected"
+                                        s.gmailAccount == null -> "Read past and new bank alert and bill emails (read-only)"
+                                        emailSync?.running == true -> "${s.gmailAccount} · syncing ${emailSync?.done ?: 0} of ${emailSync?.total ?: 0}"
+                                        emailSync?.finished == true -> "${s.gmailAccount} · synced, ${emailSync?.found ?: 0} new transactions"
+                                        s.lastEmailSyncAt > 0 -> "${s.gmailAccount} · last sync ${formatDay(s.lastEmailSyncAt)} · every 6 hours"
+                                        else -> "${s.gmailAccount} · connected"
                                     },
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -303,32 +371,49 @@ fun SettingsScreen(
                             Spacer(Modifier.height(8.dp))
                             LinearProgressIndicator(progress = { if (p.total > 0) p.done.toFloat() / p.total else 0f }, modifier = Modifier.fillMaxWidth())
                         }
-                        gmailError?.let {
+                        val syncError = emailSync?.error?.takeIf { emailSync?.failed == true && s.gmailAccount != null }
+                        val needsApproval = syncError?.startsWith("consent:") == true || syncError == EmailSyncWorker.ERR_CONSENT
+                        (gmailError ?: syncError?.removePrefix("consent:")?.let { if (it == EmailSyncWorker.ERR_CONSENT) "Gmail needs your approval again." else it })?.let {
                             Spacer(Modifier.height(6.dp))
                             Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
                         }
-                        if (emailSync?.failed == true && s.gmailConnected) {
-                            Spacer(Modifier.height(6.dp))
-                            val err = emailSync?.error
-                            Text(
-                                when {
-                                    err == null -> "Last sync failed."
-                                    err == EmailSyncWorker.ERR_CONSENT -> "Google needs you to allow access again. Tap Reconnect."
-                                    else -> "Last sync failed: $err"
-                                },
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.error,
-                            )
-                        }
                         Row {
-                            if (!s.gmailConnected) {
-                                TextButton(onClick = { vm.connectGmail { pi -> consent.launch(IntentSenderRequest.Builder(pi.intentSender).build()) } }) { Text("Connect Gmail") }
+                            if (s.gmailAccount == null) {
+                                TextButton(onClick = { picker.launch(vm.accountPickerIntent()) }) { Text("Connect Gmail") }
                             } else {
+                                if (needsApproval) TextButton(onClick = { vm.approveAgain() }) { Text("Approve access") }
                                 TextButton(onClick = { vm.syncEmail() }, enabled = emailSync?.running != true) { Text("Sync now") }
-                                TextButton(onClick = { vm.connectGmail { pi -> consent.launch(IntentSenderRequest.Builder(pi.intentSender).build()) } }) { Text("Reconnect") }
                                 TextButton(onClick = { vm.disconnectGmail() }) { Text("Disconnect") }
                             }
                         }
+                    }
+                }
+            }
+
+            item { SectionTitle("Notifications", Modifier.padding(start = 4.dp, top = 8.dp)) }
+            item {
+                SectionCard(contentPadding = PaddingValues(vertical = 6.dp)) {
+                    SwitchRow(
+                        Icons.Rounded.NotificationsActive,
+                        "Daily summary",
+                        "Every evening: today's spend, top category and bills due soon",
+                        s.dailySummary,
+                    ) { on ->
+                        if (on && Build.VERSION.SDK_INT >= 33 &&
+                            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+                        ) {
+                            notifPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+                        } else {
+                            vm.setDailySummary(on)
+                        }
+                    }
+                    if (s.dailySummary) {
+                        Row(Modifier.padding(start = 60.dp, end = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            listOf(19, 20, 21, 22, 23).forEach { h ->
+                                FilterChip(selected = s.summaryHour == h, onClick = { vm.setSummaryHour(h) }, label = { Text("${h - 12} PM") })
+                            }
+                        }
+                        TextButton(onClick = { vm.sendTestSummary() }, modifier = Modifier.padding(start = 52.dp)) { Text("Send today's summary now") }
                     }
                 }
             }

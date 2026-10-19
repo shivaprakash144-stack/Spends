@@ -106,6 +106,21 @@ class EmailAndNotificationTest {
     }
 
     @Test
+    fun otherBankAppNotification() {
+        val s = ok(engine.parseNotification("com.idfcfirstbank.optimus", "Transaction alert", "INR 1,250.00 debited from your A/c XX1234 on 19-10-2026 towards UPI/SWIGGY. Avl bal INR 9,000.00", at))
+        assertEquals(125000L, s.amountPaise)
+        assertEquals(TxnType.DEBIT, s.type)
+        assertEquals("1234", s.last4)
+    }
+
+    @Test
+    fun hdfcAppNotification() {
+        val s = ok(engine.parseNotification("com.snapwork.hdfc", "HDFC Bank", "Rs.499.00 spent on HDFC Bank Card XX4321 at NETFLIX on 2026-10-12", at))
+        assertEquals(49900L, s.amountPaise)
+        assertEquals("hdfc", s.bankId)
+    }
+
+    @Test
     fun randomAppNotificationIgnored() {
         val r = engine.parseNotification("com.whatsapp", "Rahul", "Paid ₹500 to you", at)
         assertTrue(r is ParseResult.Ignored)

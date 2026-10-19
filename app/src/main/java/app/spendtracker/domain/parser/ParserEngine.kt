@@ -76,6 +76,8 @@ class ParserEngine(
             ?: generic(bank, bank.name, cleaned, postedAt, if (isEmailApp) AccountRefRule.STRICT else AccountRefRule.NONE)
     }
 
+    fun isBankLikeSender(sender: String?): Boolean = senderFilter.isBankStyle(sender)
+
     fun isWatchedPackage(packageName: String): Boolean =
         packageName in config.emailApps || config.banks.any { packageName in it.packages }
 

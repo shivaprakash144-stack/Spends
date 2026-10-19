@@ -2,9 +2,11 @@ package app.spendtracker.data.sms
 
 import app.spendtracker.data.db.AccountEntity
 import app.spendtracker.data.db.AppDatabase
+import app.spendtracker.data.db.BillEntity
 import app.spendtracker.data.db.RawSmsEntity
 import app.spendtracker.data.db.TransactionEntity
 import app.spendtracker.data.repository.RulesSource
+import app.spendtracker.domain.bills.BillParser
 import app.spendtracker.domain.dedupe.DedupeDecision
 import app.spendtracker.domain.dedupe.Deduplicator
 import app.spendtracker.domain.dedupe.TxnFingerprint
@@ -47,6 +49,13 @@ class SmsProcessor @Inject constructor(
 
     suspend fun process(sender: String, body: String, receivedAt: Long, androidSmsId: Long?): ProcessOutcome = mutex.withLock {
         rules.ensureSeeded()
+        // Bill / due-date reminders are captured from every source before the normal parse
+        // (the parser itself ignores them so they never count as spend).
+        captureBill(sender, body, receivedAt)
+        // Personal SMS (phone-number senders) are never stored.
+        if (!sender.startsWith(EMAIL_PREFIX) && !sender.startsWith(NOTIF_PREFIX) && !rules.parser.isBankLikeSender(sender)) {
+            return@withLock ProcessOutcome.IGNORED
+        }
         val hash = sha256("${sender.uppercase().trim()}|$body")
         // Live receiver and inbox scan see the same SMS with slightly different times.
         val seen = db.rawSms().byHash(hash).any { abs(it.receivedAt - receivedAt) < SAME_SMS_WINDOW_MS }
@@ -153,10 +162,38 @@ class SmsProcessor @Inject constructor(
             }
             DedupeDecision.Unique -> {
                 val newId = db.transactions().insert(txn)
-                if (newId > 0) detectSelfTransfer(txn.copy(id = newId), nearby, accounts)
+                if (newId > 0) {
+                    detectSelfTransfer(txn.copy(id = newId), nearby, accounts)
+                    settleBills(txn, newId)
+                }
                 ProcessOutcome.ADDED
             }
         }
+    }
+
+    // ---------------- Bills ----------------
+
+    private suspend fun captureBill(sender: String, body: String, receivedAt: Long) {
+        val isBankSource = sender.startsWith(EMAIL_PREFIX) || sender.startsWith(NOTIF_PREFIX) || rules.parser.isBankLikeSender(sender)
+        if (!isBankSource) return
+        val text = if (sender.startsWith(EMAIL_PREFIX)) body.removePrefix(SUBJECT_PREFIX) else body
+        val bill = BillParser.parse(text.take(2000), receivedAt) ?: return
+        val key = "${bill.biller.lowercase()}|${bill.dueDate}|${bill.amountPaise}"
+        db.bills().insert(
+            BillEntity(
+                biller = bill.biller, kind = bill.kind.name, amountPaise = bill.amountPaise, minDuePaise = bill.minDuePaise,
+                dueDate = bill.dueDate.toEpochDay(), last4 = bill.last4, status = BILL_DUE, sourceText = text.take(600),
+                dedupeKey = key, createdAt = System.currentTimeMillis(), paidTxnId = null,
+            ),
+        )
+    }
+
+    /** A payment matching an open bill's total or minimum due, within 25 days before / 5 after the due date, settles it. */
+    private suspend fun settleBills(txn: TransactionEntity, id: Long) {
+        val day = java.time.Instant.ofEpochMilli(txn.timestamp).atZone(java.time.ZoneId.systemDefault()).toLocalDate().toEpochDay()
+        val open = db.bills().dueBetween(day - 5, day + 25)
+        val match = open.firstOrNull { b -> txn.amountPaise == b.amountPaise || (b.minDuePaise != null && txn.amountPaise == b.minDuePaise) } ?: return
+        db.bills().setStatus(match.id, BILL_PAID, id)
     }
 
     // ---------------- Bank statement import ----------------
@@ -275,6 +312,9 @@ class SmsProcessor @Inject constructor(
     companion object {
         const val SAME_SMS_WINDOW_MS = 10 * 60 * 1000L
         private const val HOUR = 60 * 60 * 1000L
+        const val BILL_DUE = "DUE"
+        const val BILL_PAID = "PAID"
+        const val BILL_DISMISSED = "DISMISSED"
         const val EMAIL_PREFIX = "email:"
         const val NOTIF_PREFIX = "notif:"
         private const val SUBJECT_PREFIX = "Subject: "

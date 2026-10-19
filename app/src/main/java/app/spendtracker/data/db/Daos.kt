@@ -19,6 +19,9 @@ interface TransactionDao {
     @Query("$TXN_ROW_SELECT WHERE t.isDuplicateOf IS NULL AND t.timestamp >= :from AND t.timestamp < :to ORDER BY t.timestamp DESC")
     fun observeBetween(from: Long, to: Long): Flow<List<TxnRow>>
 
+    @Query("$TXN_ROW_SELECT WHERE t.isDuplicateOf IS NULL AND t.timestamp >= :from AND t.timestamp < :to ORDER BY t.timestamp DESC")
+    suspend fun between(from: Long, to: Long): List<TxnRow>
+
     @Query("$TXN_ROW_SELECT WHERE t.isDuplicateOf IS NULL ORDER BY t.timestamp DESC LIMIT :limit")
     fun observeRecent(limit: Int): Flow<List<TxnRow>>
 
@@ -219,4 +222,22 @@ abstract class MaintenanceDao {
         deleteSmsTxns()
         deleteRaw()
     }
+}
+
+@Dao
+interface BillDao {
+    @Query("SELECT * FROM bills WHERE status = 'DUE' AND dueDate >= :fromEpochDay ORDER BY dueDate, amountPaise DESC")
+    fun observeDueFrom(fromEpochDay: Long): Flow<List<BillEntity>>
+
+    @Query("SELECT * FROM bills ORDER BY CASE status WHEN 'DUE' THEN 0 ELSE 1 END, dueDate DESC LIMIT 200")
+    fun observeAll(): Flow<List<BillEntity>>
+
+    @Query("SELECT * FROM bills WHERE status = 'DUE' AND dueDate BETWEEN :fromEpochDay AND :toEpochDay ORDER BY dueDate")
+    suspend fun dueBetween(fromEpochDay: Long, toEpochDay: Long): List<BillEntity>
+
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insert(b: BillEntity): Long
+
+    @Query("UPDATE bills SET status = :status, paidTxnId = :paidTxnId WHERE id = :id")
+    suspend fun setStatus(id: Long, status: String, paidTxnId: Long?)
 }

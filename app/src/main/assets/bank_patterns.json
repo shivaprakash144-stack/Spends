@@ -1,9 +1,10 @@
 {
   "version": 1,
   "_doc": "Regexes are tried in order per bank, then a generic fallback. Named groups: amount, type, last4, merchant, ref, balance, limit, date. Macros: {AMT} amount, {CUR} Rs/INR/₹, {MASK} XX/** mask, {DATE} date token. Body whitespace (including new lines) is collapsed to single spaces before matching. Matching is case-insensitive.",
-
-  "emailApps": ["com.google.android.gm", "com.microsoft.office.outlook"],
-
+  "emailApps": [
+    "com.google.android.gm",
+    "com.microsoft.office.outlook"
+  ],
   "skip": [
     "\\bOTP\\b",
     "one[ -]?time[ -]?pass(?:word|code)",
@@ -22,7 +23,6 @@
     "will be (?:debited|deducted|charged)",
     "\\bstatement (?:for|of)\\b.*\\bgenerated\\b"
   ],
-
   "promo": [
     "pre-?approved",
     "\\boffers?\\b",
@@ -38,15 +38,31 @@
     "\\binstant loan\\b",
     "\\bhurry\\b"
   ],
-
   "banks": [
     {
       "id": "hdfc",
-      "emailDomains": ["hdfcbank.net","hdfcbank.com","hdfcbank.bank.in"],
-      "names": ["HDFC Bank","HDFC"],
-      "packages": ["com.snapwork.hdfc","com.hdfcbank.payzapp"],
+      "emailDomains": [
+        "hdfcbank.net",
+        "hdfcbank.com",
+        "hdfcbank.bank.in"
+      ],
+      "names": [
+        "HDFC Bank",
+        "HDFC"
+      ],
+      "packages": [
+        "com.hdfc.retailbankingapp",
+        "com.hdfcbank.payzapp",
+        "com.hdfcbank.smartbuy",
+        "com.snapwork.hdfc"
+      ],
       "name": "HDFC Bank",
-      "senders": ["HDFCBK", "HDFCBN", "HDFCBANK", "HDFCCC"],
+      "senders": [
+        "HDFCBK",
+        "HDFCBN",
+        "HDFCBANK",
+        "HDFCCC"
+      ],
       "patterns": [
         {
           "id": "hdfc-email-upi-debit",
@@ -93,11 +109,26 @@
     },
     {
       "id": "icici",
-      "emailDomains": ["icicibank.com","icici.bank.in"],
-      "names": ["ICICI Bank","ICICI"],
-      "packages": ["com.csam.icici.bank.imobile"],
+      "emailDomains": [
+        "icicibank.com",
+        "icici.bank.in"
+      ],
+      "names": [
+        "ICICI Bank",
+        "ICICI"
+      ],
+      "packages": [
+        "com.csam.icici.bank.imobile",
+        "com.icicibank.imobile",
+        "com.icicibank.pockets"
+      ],
       "name": "ICICI Bank",
-      "senders": ["ICICIB", "ICICIT", "ICICIBANK", "ICICIO"],
+      "senders": [
+        "ICICIB",
+        "ICICIT",
+        "ICICIBANK",
+        "ICICIO"
+      ],
       "patterns": [
         {
           "id": "icici-card-spent",
@@ -121,11 +152,36 @@
     },
     {
       "id": "sbi",
-      "emailDomains": ["sbi.co.in","sbicard.com","alerts.sbi.co.in","sbi.bank.in"],
-      "names": ["State Bank of India","SBI Card","SBI"],
-      "packages": ["com.sbi.lotusintouch","com.sbi.SBIFreedomPlus","com.sbi.upi","com.sbicard.mobile"],
+      "emailDomains": [
+        "sbi.co.in",
+        "sbicard.com",
+        "alerts.sbi.co.in",
+        "sbi.bank.in"
+      ],
+      "names": [
+        "State Bank of India",
+        "SBI Card",
+        "SBI"
+      ],
+      "packages": [
+        "com.sbi.SBIFreedomPlus",
+        "com.sbi.lotusintouch",
+        "com.sbi.upi",
+        "com.sbi.yono",
+        "com.sbicard.mobile"
+      ],
       "name": "SBI",
-      "senders": ["SBIUPI", "SBIINB", "SBIPSG", "SBMSMS", "CBSSBI", "ATMSBI", "SBICRD", "SBIBNK", "SBYONO"],
+      "senders": [
+        "SBIUPI",
+        "SBIINB",
+        "SBIPSG",
+        "SBMSMS",
+        "CBSSBI",
+        "ATMSBI",
+        "SBICRD",
+        "SBIBNK",
+        "SBYONO"
+      ],
       "patterns": [
         {
           "id": "sbi-upi-debit",
@@ -156,11 +212,24 @@
     },
     {
       "id": "axis",
-      "emailDomains": ["axisbank.com","axis.bank.in"],
-      "names": ["Axis Bank","Axis"],
-      "packages": ["com.axis.mobile"],
+      "emailDomains": [
+        "axisbank.com",
+        "axis.bank.in"
+      ],
+      "names": [
+        "Axis Bank",
+        "Axis"
+      ],
+      "packages": [
+        "com.axis.mobile",
+        "com.axisbank.openbanking"
+      ],
       "name": "Axis Bank",
-      "senders": ["AXISBK", "AXISBN", "AXISBANK"],
+      "senders": [
+        "AXISBK",
+        "AXISBN",
+        "AXISBANK"
+      ],
       "patterns": [
         {
           "id": "axis-credit",
@@ -189,11 +258,25 @@
     },
     {
       "id": "kotak",
-      "emailDomains": ["kotak.com","kotak.bank.in"],
-      "names": ["Kotak Mahindra Bank","Kotak Bank","Kotak"],
-      "packages": ["com.msf.kbank.mobile"],
+      "emailDomains": [
+        "kotak.com",
+        "kotak.bank.in"
+      ],
+      "names": [
+        "Kotak Mahindra Bank",
+        "Kotak Bank",
+        "Kotak"
+      ],
+      "packages": [
+        "com.kotak811mobilebankingapp.instantsavingsupiscanandpayrecharge",
+        "com.msf.kbank.mobile"
+      ],
       "name": "Kotak Bank",
-      "senders": ["KOTAKB", "KOTAKBANK", "KMBLTD"],
+      "senders": [
+        "KOTAKB",
+        "KOTAKBANK",
+        "KMBLTD"
+      ],
       "patterns": [
         {
           "id": "kotak-debited-vpa",
@@ -217,13 +300,25 @@
     },
     {
       "id": "paytm",
-      "emailDomains": ["paytm.com","paytmbank.com"],
-      "names": ["Paytm"],
-      "packages": ["net.one97.paytm"],
+      "emailDomains": [
+        "paytm.com",
+        "paytmbank.com"
+      ],
+      "names": [
+        "Paytm"
+      ],
+      "packages": [
+        "net.one97.paytm"
+      ],
       "name": "Paytm",
       "kind": "UPI_APP",
       "accountType": "WALLET",
-      "senders": ["PAYTMB", "IPAYTM", "PYTMBK", "PAYTM"],
+      "senders": [
+        "PAYTMB",
+        "IPAYTM",
+        "PYTMBK",
+        "PAYTM"
+      ],
       "patterns": [
         {
           "id": "paytm-wallet-paid",
@@ -243,13 +338,22 @@
     },
     {
       "id": "phonepe",
-      "emailDomains": ["phonepe.com"],
-      "names": ["PhonePe"],
-      "packages": ["com.phonepe.app"],
+      "emailDomains": [
+        "phonepe.com"
+      ],
+      "names": [
+        "PhonePe"
+      ],
+      "packages": [
+        "com.phonepe.app"
+      ],
       "name": "PhonePe",
       "kind": "UPI_APP",
       "accountType": "SAVINGS",
-      "senders": ["PHONPE", "PHONEPE"],
+      "senders": [
+        "PHONPE",
+        "PHONEPE"
+      ],
       "patterns": [
         {
           "id": "phonepe-notif-paid",
@@ -286,12 +390,21 @@
     {
       "id": "gpay",
       "emailDomains": [],
-      "names": ["Google Pay","GPay"],
-      "packages": ["com.google.android.apps.nbu.paisa.user"],
+      "names": [
+        "Google Pay",
+        "GPay"
+      ],
+      "packages": [
+        "com.google.android.apps.nbu.paisa.user"
+      ],
       "name": "Google Pay",
       "kind": "UPI_APP",
       "accountType": "SAVINGS",
-      "senders": ["GPAY", "GOOGLEPAY", "GOOGPY"],
+      "senders": [
+        "GPAY",
+        "GOOGLEPAY",
+        "GOOGPY"
+      ],
       "patterns": [
         {
           "id": "gpay-notif-paid",
@@ -318,6 +431,83 @@
           "regex": "(?:Paid|Sent) {CUR}(?<amount>{AMT}) to (?<merchant>.+?)(?: from .+? {MASK}(?<last4>\\d{4}))?\\.?.*?(?:UPI )?(?:Ref|transaction ID)(?: No)?\\.?:? ?(?<ref>\\d{9,})"
         }
       ]
+    },
+    {
+      "id": "bankapp",
+      "name": "Bank app",
+      "kind": "UPI_APP",
+      "accountType": "SAVINGS",
+      "_doc": "Other bank / UPI / card apps whose notifications are read with the generic parser.",
+      "emailDomains": [
+        "idfcfirstbank.com",
+        "yesbank.in",
+        "bankofbaroda.com",
+        "pnb.co.in",
+        "canarabank.com",
+        "indusind.com",
+        "federalbank.co.in",
+        "aubank.in",
+        "rblbank.com",
+        "unionbankofindia.co.in",
+        "bankofindia.co.in",
+        "onecard.app",
+        "cred.club"
+      ],
+      "names": [
+        "IDFC FIRST Bank",
+        "Yes Bank",
+        "Bank of Baroda",
+        "Punjab National Bank",
+        "Canara Bank",
+        "IndusInd Bank",
+        "Federal Bank",
+        "AU Small Finance Bank",
+        "RBL Bank",
+        "Union Bank",
+        "Bank of India",
+        "OneCard",
+        "CRED"
+      ],
+      "senders": [
+        "IDFCFB",
+        "YESBNK",
+        "BOBTXN",
+        "BOBSMS",
+        "PNBSMS",
+        "CANBNK",
+        "INDUSB",
+        "FEDBNK",
+        "AUBANK",
+        "RBLBNK",
+        "UNIONB",
+        "BOIIND",
+        "ONECRD",
+        "CREDIN"
+      ],
+      "packages": [
+        "com.idfcfirstbank.optimus",
+        "com.yesbank",
+        "com.bankofbaroda.mconnect",
+        "com.bankofbaroda.bobworld",
+        "com.pnb.pnbone",
+        "com.canarabank.mobility",
+        "com.indusind.mobile",
+        "com.fedmobile",
+        "com.aubank.aupay",
+        "com.rblbank.mobank",
+        "com.unionbankofindia.vyom",
+        "com.boi.ua.android",
+        "com.onecard.app",
+        "com.dreamplug.androidapp",
+        "in.org.npci.upiapp",
+        "com.naviapp",
+        "money.jupiter",
+        "com.epifi.paisa",
+        "indwin.c3.shareapp",
+        "com.mobikwik_new",
+        "com.freecharge.android"
+      ],
+      "patterns": []
     }
   ]
 }

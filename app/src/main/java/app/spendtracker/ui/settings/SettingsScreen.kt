@@ -139,6 +139,10 @@ class SettingsViewModel @Inject constructor(
     val fgSync: StateFlow<ScanProgress?> = _fgSync.asStateFlow()
 
     private var pendingEmail: String? = null
+
+    private companion object {
+        const val MORE_NOTE = "more"
+    }
     private var consentAttempts = 0
 
     fun accountPickerIntent(): Intent = gmail.accountPickerIntent()
@@ -191,8 +195,15 @@ class SettingsViewModel @Inject constructor(
         _fgSync.value = ScanProgress(running = true, finished = false, done = 0, total = 0, found = 0, failed = false)
         val r = syncer.run { d, t, f -> _fgSync.value = ScanProgress(true, false, d, t, f, false) }
         _fgSync.value = when (r) {
-            is EmailSyncOutcome.Ok -> ScanProgress(false, true, r.done, r.total, r.found, false)
-            is EmailSyncOutcome.Err -> ScanProgress(false, false, 0, 0, 0, true, if (r.consent) "consent:" + r.message else r.message)
+            is EmailSyncOutcome.Ok -> {
+                // Big mailbox: the rest is fetched in the background in small batches.
+                if (r.more) EmailSyncWorker.syncSoon(context, 2)
+                ScanProgress(false, true, r.done, r.total, r.found, false, if (r.more) MORE_NOTE else null)
+            }
+            is EmailSyncOutcome.Err -> {
+                if (r.retryable) EmailSyncWorker.syncSoon(context, 3)
+                ScanProgress(false, false, 0, 0, 0, true, if (r.consent) "consent:" + r.message else r.message)
+            }
         }
     }
 
@@ -357,6 +368,8 @@ fun SettingsScreen(
                                     when {
                                         s.gmailAccount == null -> "Read past and new bank alert and bill emails (read-only)"
                                         emailSync?.running == true -> "${s.gmailAccount} · syncing ${emailSync?.done ?: 0} of ${emailSync?.total ?: 0}"
+                                        emailSync?.finished == true && emailSync?.error == "more" ->
+                                            "${s.gmailAccount} · ${emailSync?.found ?: 0} new so far; older emails continue in the background"
                                         emailSync?.finished == true -> "${s.gmailAccount} · synced, ${emailSync?.found ?: 0} new transactions"
                                         s.lastEmailSyncAt > 0 -> "${s.gmailAccount} · last sync ${formatDay(s.lastEmailSyncAt)} · every 6 hours"
                                         else -> "${s.gmailAccount} · connected"

@@ -31,9 +31,12 @@ class EmailSyncWorker @AssistedInject constructor(
     override suspend fun doWork(): Result {
         if (settings.current().gmailAccount == null) return Result.success()
         return when (val r = syncer.run { d, t, f -> setProgress(workDataOf(KEY_DONE to d, KEY_TOTAL to t, KEY_FOUND to f)) }) {
-            is EmailSyncOutcome.Ok -> Result.success(workDataOf(KEY_DONE to r.done, KEY_TOTAL to r.total, KEY_FOUND to r.found))
+            is EmailSyncOutcome.Ok -> {
+                if (r.more) syncSoon(applicationContext, 2)
+                Result.success(workDataOf(KEY_DONE to r.done, KEY_TOTAL to r.total, KEY_FOUND to r.found))
+            }
             is EmailSyncOutcome.Err ->
-                if (r.retryable && runAttemptCount < 3) Result.retry()
+                if (r.retryable && runAttemptCount < 5) Result.retry()
                 else Result.failure(workDataOf(KEY_ERROR to r.message))
         }
     }
@@ -48,6 +51,15 @@ class EmailSyncWorker @AssistedInject constructor(
         const val ERR_CONSENT = "consent"
 
         private val online = Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build()
+
+        /** Next batch / retry after Gmail's quota window has passed. */
+        fun syncSoon(context: Context, minutes: Long) {
+            val req = OneTimeWorkRequestBuilder<EmailSyncWorker>()
+                .setConstraints(online)
+                .setInitialDelay(minutes, TimeUnit.MINUTES)
+                .build()
+            WorkManager.getInstance(context).enqueueUniqueWork(NAME, ExistingWorkPolicy.REPLACE, req)
+        }
 
         fun syncNow(context: Context) {
             val req = OneTimeWorkRequestBuilder<EmailSyncWorker>().setConstraints(online).build()

@@ -103,6 +103,9 @@ class GmailClient @Inject constructor(@ApplicationContext private val context: C
                 val reason = runCatching {
                     ((obj?.get("errors") as? JsonArray)?.firstOrNull()?.jsonObject?.get("reason") as? JsonPrimitive)?.content
                 }.getOrNull() ?: (obj?.get("status") as? JsonPrimitive)?.content
+                val rateLimited = code == 429 || (code == 403 && (reason in RATE_REASONS ||
+                    message.contains("rate limit", true) || message.contains("quota exceeded", true)))
+                if (rateLimited) throw RateLimitedException(message)
                 throw GmailHttpException(code, reason, message)
             }
             val text = conn.inputStream.bufferedReader().use { it.readText() }
@@ -114,6 +117,9 @@ class GmailClient @Inject constructor(@ApplicationContext private val context: C
 
     class AuthExpiredException : IOException("Gmail access expired")
 
+    /** Google's per-minute quota was hit; wait and try again. */
+    class RateLimitedException(message: String) : Exception(message)
+
     /** A non-network error from Google (API disabled, quota, bad request...). Retrying won't help. */
     class GmailHttpException(val code: Int, val reason: String?, override val message: String) : Exception(message)
 
@@ -121,6 +127,7 @@ class GmailClient @Inject constructor(@ApplicationContext private val context: C
         const val GOOGLE_TYPE = "com.google"
         const val GMAIL_READONLY = "https://www.googleapis.com/auth/gmail.readonly"
         private const val BASE = "https://gmail.googleapis.com/gmail/v1/users/me"
+        private val RATE_REASONS = setOf("rateLimitExceeded", "userRateLimitExceeded", "RESOURCE_EXHAUSTED", "quotaExceeded")
 
         /** Turns Google's terse auth error codes into a fix the user can act on. */
         fun explain(code: String?): String = when {
@@ -137,7 +144,7 @@ class GmailClient @Inject constructor(@ApplicationContext private val context: C
 
         /** Gmail search for transaction alerts and bill reminders; promotions and OTP mails are left out. */
         fun query(sinceEpochSeconds: Long): String =
-            "after:$sinceEpochSeconds {debited credited spent withdrawn \"transaction alert\" \"txn\" \"has been debited\" \"has been credited\" \"UPI txn\" \"due date\" \"is due\" \"amount due\" \"bill\"} " +
+            "after:$sinceEpochSeconds {debited credited spent withdrawn \"transaction alert\" \"has been debited\" \"has been credited\" \"UPI txn\" \"due date\" \"is due\" \"amount due\"} " +
                 "-category:promotions -category:social -subject:OTP"
     }
 }
